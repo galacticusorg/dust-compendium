@@ -160,3 +160,35 @@ class TestRuns:
 
     def test_repr_summarises_the_campaign(self):
         assert "3172 models" in repr(campaign())
+
+
+CUSTOM_INCLINATIONS = (
+    PUBLISHED.replace(
+        "label: compendium",
+        "label: compendium",
+    )
+    + """tabulation:
+  inclinations: [9.3, 22.9, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]
+"""
+)
+
+
+def test_custom_inclinations_are_the_ones_recorded():
+    """Regression against a defect in the published Ferrara tabulations.
+
+    ``runModels.pl`` passed a model's own inclinations to the model builder, so
+    the models were solved at them, but then built the axis it recorded as a
+    uniform grid from zero to ninety regardless (lines 400-406). The published
+    ``Ferrara1999_*`` datasets therefore hold attenuations computed at 9.3, 22.9,
+    30 ... degrees while their ``inclination`` dataset says 0, 11.25, 22.5 ...,
+    so anything interpolating them reads the wrong angle. Comparing the
+    published file against Ferrara's own atlas shows it: index for index they
+    agree to a median of 0.003 in transmission, while interpolating the atlas
+    onto the uniform axis is nearly three times worse.
+    """
+    one = campaign(CUSTOM_INCLINATIONS)
+    expected = [9.3, 22.9, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]
+    np.testing.assert_allclose(one.inclinations, expected)
+    for run in list(one.runs())[:3]:
+        np.testing.assert_allclose(run.spec.inclinations, expected)
+    assert not np.allclose(one.inclinations, np.linspace(0.0, 90.0, len(expected)))

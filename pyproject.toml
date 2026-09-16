@@ -82,4 +82,5 @@ markers   = [
     "hyperion: requires the Hyperion Python package",
     "solver: requires a built Hyperion Fortran solver binary",
     "slow: takes more than a few seconds",
+    "reference: needs published reference tabulations which are not vendored",
 ]

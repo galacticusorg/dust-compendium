@@ -138,3 +138,27 @@ def test_the_published_grid_barely_needs_the_quadrature_fallback(profile):
     flagged = profile._ill_conditioned(*scaled)
     assert flagged.sum() <= 4
     assert np.all(np.isfinite(profile.cell_mass(*walls)))
+
+
+@pytest.mark.parametrize(
+    ("cut_off", "affected"),
+    [(10.0, True), (6.0, False)],
+    ids=["compendium-cutOff-10", "ferrara-cutOff-6"],
+)
+def test_whether_the_scale_radius_falls_on_a_wall_depends_on_the_cut_off(cut_off, affected):
+    """Which published tabulations the sign defect could reach, and which it could not.
+
+    The vertical walls are ``linspace(-c r_s, +c r_s, n + 1)``, so ``z = -r_s``
+    is one of them exactly when ``(n/2)(c - 1)/c`` is a whole number. With a
+    hundred cells that holds for the compendium's cut off of ten, giving 45, and
+    fails for the Ferrara-matched models' cut off of six, giving 41.67. So the
+    compendium tabulations could hit the corner whose sign the original got
+    wrong and the Ferrara-matched ones could not -- which is borne out by the
+    published Ferrara files, whose spheroid agrees with Ferrara's own atlas to a
+    median of 0.012 in transmission.
+    """
+    cells = 100
+    walls = np.linspace(-cut_off, cut_off, cells + 1)
+    lands_on_wall = bool(np.any(np.isclose(walls, -1.0, rtol=0.0, atol=1.0e-12)))
+    assert lands_on_wall is affected
+    assert lands_on_wall == (abs((cells / 2) * (cut_off - 1.0) / cut_off % 1.0) < 1.0e-12)

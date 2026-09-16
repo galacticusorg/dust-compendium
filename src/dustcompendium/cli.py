@@ -381,3 +381,100 @@ def plot(
     axes.figure.savefig(output)
     plt.close(axes.figure)
     typer.echo(f"wrote {output}")
+
+
+@app.command()
+def compare(
+    tabulation: Annotated[
+        Path, typer.Argument(exists=True, dir_okay=False, help="A tabulation, as written by collect.")
+    ],
+    atlas: Annotated[
+        Path,
+        typer.Option(
+            "--atlas", "-a", exists=True, dir_okay=False, help="A published atlas to compare against."
+        ),
+    ],
+    tolerance: Annotated[
+        float, typer.Option(help="Absolute agreement in transmission to report against.")
+    ] = 0.02,
+    figure: Annotated[Path | None, typer.Option("--figure", "-f", help="Also draw the two overlaid.")] = None,
+    wavelength: Annotated[float, typer.Option(help="Wavelength for the figure, in microns.")] = 0.5512,
+) -> None:
+    """Compare a tabulation against a published atlas.
+
+    This is what the original's plotting scripts offered as ``--showAtlas``,
+    made into a measurement rather than a decoration: it reports how closely the
+    two agree, not merely draws them together.
+
+    Note that the Ferrara et al. (1999) atlas is published to two decimal places
+    -- some of its entries exceed a transmission of one by exactly the rounding
+    -- so agreement closer than about 0.01 cannot be demonstrated against it.
+    """
+    from .tabulation import read_tabulation
+    from .validation import ATLAS_QUANTIZATION, compare_with_atlas, read_atlas
+
+    table = read_tabulation(str(tabulation))
+    published = read_atlas(atlas)
+    typer.echo(f"{table.label} against {atlas.name}")
+    typer.echo(
+        f"  the atlas is quantized at {ATLAS_QUANTIZATION:g} in transmission, "
+        "which is the floor on any disagreement"
+    )
+    comparisons = {}
+    worst = 0.0
+    for emitter in table.emitters:
+        if emitter not in published.attenuation:
+            continue
+        try:
+            comparisons[emitter] = compare_with_atlas(table, published, emitter)
+        except ValueError as error:
+            typer.echo(f"  {emitter}: {error}", err=True)
+            raise typer.Exit(code=1) from None
+        typer.echo(f"  {comparisons[emitter].summary()}")
+        worst = max(worst, comparisons[emitter].median)
+
+    if figure is not None:
+        _draw_comparison(table, published, comparisons, figure, wavelength)
+        typer.echo(f"  wrote {figure}")
+    if worst > tolerance:
+        typer.echo(f"median disagreement exceeds {tolerance:g}", err=True)
+        raise typer.Exit(code=1)
+
+
+def _draw_comparison(table, published, comparisons, figure: Path, wavelength: float) -> None:
+    """Overlay a tabulation on an atlas, against inclination, at each optical depth."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    index = int(np.argmin(np.abs(published.wavelengths - wavelength)))
+    fig, panels = plt.subplots(
+        1, len(comparisons), figsize=(6.0 * len(comparisons), 4.5), squeeze=False, constrained_layout=True
+    )
+    for panel, (emitter, comparison) in zip(panels[0], comparisons.items(), strict=True):
+        computed = comparison.computed[index]
+        reference = comparison.published[index]
+        if computed.ndim > 2:
+            computed, reference = computed[..., 0], reference[..., 0]
+        colours = plt.get_cmap("viridis")(np.linspace(0.0, 1.0, computed.shape[1]))
+        for depth in range(computed.shape[1]):
+            panel.plot(published.inclinations, computed[:, depth], color=colours[depth], linewidth=2.0)
+            panel.plot(
+                published.inclinations,
+                reference[:, depth],
+                color=colours[depth],
+                linestyle="none",
+                marker="o",
+                markersize=4.0,
+                markerfacecolor="none",
+            )
+        panel.set_xlabel(r"Inclination; $i\,[^\circ]$")
+        panel.set_ylabel("Transmission")
+        panel.set_title(
+            f"{emitter} at {published.wavelengths[index]:g} micron\nlines: computed, circles: published",
+            fontsize="small",
+        )
+    figure.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(figure, dpi=110)
+    plt.close(fig)

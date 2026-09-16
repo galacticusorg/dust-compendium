@@ -1,0 +1,68 @@
+# Matched to Ferrara et al. (1999; ApJS; 123; 437), for validation.
+#
+# Same grain properties, same galactic geometry, and tabulated at the same
+# wavelengths, inclinations, optical depths and spheroid sizes, so that the
+# result can be compared with their published atlas directly. That atlas ships
+# with Galacticus as
+# `datasets/static/dust/atlasFerrara2000/attenuations_MilkyWay_dustHeightRatio1.0.hdf5`,
+# in the same layout this package writes.
+#
+# Two conversions are worth stating, because the two tabulations do not use the
+# same variables. Ferrara et al. list the spheroid's *effective* radius, and the
+# scale radius is 1.16 times it, so their R_e of 0.1, 0.4 and 1.6 are the scale
+# radii below. And their wavelengths are published in Angstroms.
+#
+# An optical depth of zero is added to their eight, since every model is divided
+# by the one with no dust; it has no counterpart in the atlas and is dropped
+# when comparing.
+label: Ferrara1999:MilkyWay:hz1.0
+description: >-
+  Matched to Ferrara et al. (1999) with Milky Way grains and a dust scale height
+  equal to the stellar one.
+
+dust:
+  # Only ratios of emergent to emitted luminosity are used, and the densities
+  # are set by optical depth, so the absolute opacity cancels and the published
+  # extinction curve can be used as it stands.
+  ferrara: milkyWay
+  referenceOpacity: 1.0
+  description: >-
+    Gordon, Calzetti & Witt (1997; ApJ; 487; 625) Milky Way grains with
+    Henyey-Greenstein scattering, as used by Ferrara et al. (1999).
+
+geometry:
+  cutOff: 6.0
+  radialCells: 60
+  verticalCells: 60
+  spacing: nested
+  sampling: average
+  components:
+    disk:
+      stellar:
+        profile: exponentialDisk
+        verticalStructure: exponential
+        scaleRadial: 1.0
+        scaleHeight: 0.0875
+      dust:
+        profile: exponentialDisk
+        verticalStructure: exponential
+        scaleRadial: 1.0
+        scaleHeight: 0.0875
+        opticalDepth: [0.0, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0]
+    spheroid:
+      stellar:
+        profile: jaffe
+        # r_s = 1.16 R_e, for R_e of 0.1, 0.4 and 1.6.
+        scaleRadial: [0.116, 0.464, 1.856]
+        # Ferrara et al. truncate at five effective radii, which is 5/1.16 scale
+        # radii. The original wrote 5.8 here, which is 5 times 1.16 rather than
+        # 5 divided by it; since it never applied the value, nothing depended on
+        # which was meant.
+        truncation: 4.3103
+
+tabulation:
+  wavelengths: [0.1250, 0.1515, 0.1775, 0.1995, 0.2215, 0.2480, 0.2895,
+                0.3605, 0.4413, 0.5512, 0.6594, 0.8059, 1.2369, 2.1578]
+  inclinations: [9.3, 22.9, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]
+  photons: 50000
+  seed: -653

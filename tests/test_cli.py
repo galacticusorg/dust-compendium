@@ -232,3 +232,100 @@ class TestRun:
         assert result.exit_code == 1
         assert "unknown scheduler" in result.output
         assert "local, slurm" in result.output
+
+
+@pytest.mark.reference
+class TestCompare:
+    """The ported ``--showAtlas`` option, made a measurement rather than a decoration."""
+
+    @pytest.fixture
+    def tabulation(self, tmp_path):
+        """A tabulation on the atlas's own axes, holding its published values.
+
+        Comparing an atlas with itself is the one case where the answer is known
+        exactly, which is what makes it a test of the comparison rather than of
+        the models.
+        """
+        import numpy as np
+
+        from dustcompendium.tabulation import Tabulation
+        from dustcompendium.validation import read_atlas
+
+        atlas = read_atlas(self.atlas_path)
+        axis_values = {
+            "opticalDepth:disk": atlas.optical_depths,
+            "scaleRadial:spheroid": atlas.scale_radii,
+        }
+        emitter_axes = {
+            "disk": ("opticalDepth:disk",),
+            "spheroid": ("opticalDepth:disk", "scaleRadial:spheroid"),
+        }
+        shapes = {
+            emitter: (
+                atlas.wavelengths.size,
+                atlas.inclinations.size,
+                *(axis_values[name].size for name in axes),
+            )
+            for emitter, axes in emitter_axes.items()
+        }
+        path = tmp_path / "matched.hdf5"
+        Tabulation(
+            label="matched",
+            wavelengths=atlas.wavelengths,
+            inclinations=atlas.inclinations,
+            axis_names=("opticalDepth:disk", "scaleRadial:spheroid"),
+            axis_values=axis_values,
+            emitter_axes=emitter_axes,
+            attenuation=dict(atlas.attenuation),
+            uncertainty={e: np.zeros(s) for e, s in shapes.items()},
+            extrapolation={
+                "disk": np.zeros((2, atlas.wavelengths.size, atlas.inclinations.size)),
+                "spheroid": np.zeros(
+                    (2, atlas.wavelengths.size, atlas.inclinations.size, atlas.scale_radii.size)
+                ),
+            },
+            residual={
+                "disk": np.zeros((atlas.wavelengths.size, atlas.inclinations.size)),
+                "spheroid": np.zeros(
+                    (atlas.wavelengths.size, atlas.inclinations.size, atlas.scale_radii.size)
+                ),
+            },
+            opacity=1.0,
+        ).write(str(path))
+        return path
+
+    @pytest.fixture(autouse=True)
+    def _atlas(self, reference_atlas):
+        self.atlas_path = reference_atlas
+
+    def test_an_atlas_agrees_with_itself_exactly(self, runner, tabulation):
+        result = runner.invoke(app, ["compare", str(tabulation), "--atlas", str(self.atlas_path)])
+        assert result.exit_code == 0, result.output
+        assert "median |difference| 0.0000" in result.output
+        assert "100.0% within 0.02" in result.output
+
+    def test_disagreement_beyond_the_tolerance_fails(self, runner, tabulation):
+        result = runner.invoke(
+            app,
+            ["compare", str(tabulation), "--atlas", str(self.atlas_path), "--tolerance", "-1"],
+        )
+        assert result.exit_code == 1
+        assert "exceeds" in result.output
+
+    def test_it_can_draw_the_overlay(self, runner, tabulation, tmp_path):
+        figure = tmp_path / "overlay.png"
+        result = runner.invoke(
+            app,
+            ["compare", str(tabulation), "--atlas", str(self.atlas_path), "-f", str(figure)],
+        )
+        assert result.exit_code == 0, result.output
+        assert figure.exists()
+
+    def test_a_mismatched_tabulation_is_reported(self, runner, tmp_path):
+        from tests.test_plots import synthetic
+
+        path = tmp_path / "synthetic.hdf5"
+        synthetic().write(str(path))
+        result = runner.invoke(app, ["compare", str(path), "--atlas", str(self.atlas_path)])
+        assert result.exit_code == 1
+        assert "no entry at" in result.output
