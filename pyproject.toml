@@ -41,7 +41,11 @@ dependencies = [
 # install rather than promised as an extra that cannot resolve.
 plots = ["matplotlib>=3.7"]
 docs  = ["sphinx>=7.0", "myst-parser>=2.0", "sphinx-book-theme", "sphinx-autodoc-typehints"]
-dev   = ["pytest>=7.4", "pytest-cov", "ruff>=0.5", "pre-commit>=3.5"]
+# ruff is pinned exactly, and must match the `ruff-pre-commit` rev in
+# .pre-commit-config.yaml. The formatter's output changes between releases, so
+# two different versions will reformat each other's work and fail CI. Bump both
+# together, with `pre-commit autoupdate`.
+dev   = ["pytest>=7.4", "pytest-cov", "ruff==0.16.7", "pre-commit>=3.5"]
 
 [project.scripts]
 dust-compendium = "dustcompendium.cli:app"
