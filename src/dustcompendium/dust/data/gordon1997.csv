@@ -1,0 +1,26 @@
+# Dust optical properties from Gordon, Calzetti & Witt (1997; ApJ; 487; 625;
+# https://ui.adsabs.harvard.edu/abs/1997ApJ...487..625G), as used by Ferrara et
+# al. (1999; ApJS; 123; 437; https://ui.adsabs.harvard.edu/abs/1999ApJS..123..437F).
+#
+# wavelength is in Angstroms, ascending. albedo is the scattering albedo, and
+# asymmetry the Henyey-Greenstein scattering asymmetry parameter g. extinction
+# is the extinction relative to the V band, so it is 1 at 5512 Angstroms by
+# construction, and is scaled to an absolute opacity when the dust is built.
+#
+# Transcribed from hyperionDustFerrara.py, which carried them as literals.
+wavelength,albedoMilkyWay,asymmetryMilkyWay,extinctionMilkyWay,albedoSmallMagellanicCloud,asymmetrySmallMagellanicCloud,extinctionSmallMagellanicCloud
+1250,0.60,0.75,3.110,0.40,0.53,5.00
+1515,0.67,0.75,2.630,0.40,0.53,4.36
+1775,0.65,0.73,2.500,0.58,0.54,3.51
+1995,0.55,0.72,2.780,0.58,0.51,3.20
+2215,0.46,0.71,3.120,0.55,0.46,2.90
+2480,0.56,0.70,2.350,0.56,0.37,2.40
+2895,0.61,0.69,2.000,0.53,0.35,2.13
+3605,0.63,0.65,1.520,0.46,0.34,1.58
+4413,0.61,0.63,1.320,0.43,0.32,1.35
+5512,0.59,0.61,1.000,0.43,0.29,1.00
+6594,0.57,0.57,0.760,0.41,0.26,0.74
+8059,0.55,0.53,0.480,0.38,0.23,0.52
+12369,0.53,0.47,0.280,0.33,0.21,0.28
+16464,0.51,0.45,0.167,0.30,0.23,0.17
+21578,0.50,0.43,0.095,0.29,0.22,0.11

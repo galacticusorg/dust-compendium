@@ -173,3 +173,17 @@ class TestBuiltDust:
 
     def test_v_band_constant_is_where_it_is_expected(self):
         assert V_BAND_WAVELENGTH == pytest.approx(0.55)
+
+
+def test_the_tabulation_ships_with_the_package():
+    """Regression: `data/` in .gitignore once swept up this package data file.
+
+    It was untracked and absent from the wheel, so the tests passed from the
+    source tree while an installed copy would have failed to find it. Reading it
+    through importlib.resources is what an installed copy does.
+    """
+    from importlib import resources
+
+    source = resources.files("dustcompendium.dust").joinpath("data/gordon1997.csv")
+    assert source.is_file()
+    assert "Gordon" in source.read_text(encoding="utf-8")
