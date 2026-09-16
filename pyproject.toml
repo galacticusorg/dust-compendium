@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name            = "dust-compendium"
+version         = "0.1.0.dev0"
+description     = "Dust attenuation tables for simple galactic geometries, computed with Hyperion"
+readme          = "README.md"
+requires-python = ">=3.11"
+authors         = [{ name = "Andrew Benson", email = "abenson@carnegiescience.edu" }]
+license         = "MIT"
+license-files   = ["LICENSE"]
+keywords        = ["astronomy", "galaxies", "dust", "radiative transfer", "galacticus"]
+classifiers     = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+
+# The core library -- geometry, optical depth normalizations, the tabulation
+# reader and writer, and post-processing -- depends only on the array stack. It
+# is deliberately usable without Hyperion, so that reading and analyzing a
+# published tabulation does not require a radiative transfer install.
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "h5py>=3.8",
+    "pydantic>=2.0",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Note: there is deliberately no `hyperion` extra. No release of Hyperion can
+# currently build models on NumPy >= 2 -- the latest (0.9.11, April 2024) calls
+# `np.string_`, which NumPy 2.0 removed -- and the fix exists only on unreleased
+# upstream master. A `pip install` cannot reach that, and the Fortran solvers are
+# not pip-installable at all, so Hyperion is documented as a manual source
+# install rather than promised as an extra that cannot resolve.
+plots = ["matplotlib>=3.7"]
+docs  = ["sphinx>=7.0", "myst-parser>=2.0", "sphinx-book-theme", "sphinx-autodoc-typehints"]
+dev   = ["pytest>=7.4", "pytest-cov", "ruff>=0.5", "pre-commit>=3.5"]
+
+[project.scripts]
+dust-compendium = "dustcompendium.cli:app"
+
+[project.urls]
+Homepage      = "https://github.com/galacticusorg/dust-compendium"
+Documentation = "https://dust-compendium.readthedocs.io"
+Issues        = "https://github.com/galacticusorg/dust-compendium/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dustcompendium"]
+
+[tool.ruff]
+line-length    = 110
+target-version = "py311"
+src            = ["src", "tests"]
+# The original 2018 scripts are preserved verbatim in the first commit and are
+# ported in later phases, not linted in place. dustCompendiumAnalysis.py is
+# Python 2 and does not even parse.
+extend-exclude = [
+    "dustCompendiumAnalysis.py",
+    "hyperionBuildModel.py",
+    "hyperionDustFerrara.py",
+    "hyperionExtractOpacity.py",
+    "hyperionExtractWavelengths.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "NPY", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers   = [
+    "hyperion: requires the Hyperion Python package",
+    "solver: requires a built Hyperion Fortran solver binary",
+    "slow: takes more than a few seconds",
+]

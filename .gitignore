@@ -1,0 +1,32 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python build and cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Documentation build
+docs/_build/
+
+# Hyperion model inputs and outputs, and the compendium tabulations themselves.
+# These are large, reproducible from the configuration, and published to Zenodo
+# rather than tracked here.
+data/
+*.hdf5
+*.rtout
+*.pbs
+*.log
+
+# Editor and OS clutter
+.DS_Store
+*~
+.idea/
+.vscode/

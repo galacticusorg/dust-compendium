@@ -1,0 +1,32 @@
+# NOTE: do not run `pre-commit install` in this repository until the hooks
+# directory is made repository-local. `.git/hooks` here is a symlink to
+# ~/Galacticus/gitHooks, inherited from this machine's `init.templateDir`, and
+# installing into it would overwrite the shared Galacticus hooks for every
+# repository on the machine.
+# The original 2018 scripts are preserved verbatim in the first commit; the
+# whitespace and end-of-file hooks must not rewrite them.
+exclude: |
+  (?x)^(
+    dustCompendiumAnalysis\.py|
+    hyperion(BuildModel|DustFerrara|ExtractOpacity|ExtractWavelengths)\.py|
+    (AV|RV|extinctionCurve)Vs[A-Za-z]+\.pl|
+    runModels\.pl
+  )$
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=512]

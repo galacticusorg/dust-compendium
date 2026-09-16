@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev,plots]"
+      - run: ruff check .
+      # pre-commit is run here rather than installed as a git hook: this
+      # machine's git template points .git/hooks at the shared Galacticus
+      # hooks directory, so `pre-commit install` would overwrite it.
+      - uses: pre-commit/action@v3.0.1
+      # Hyperion is not installed here, so tests needing it or a built solver
+      # binary are skipped. The core physics has no such dependency.
+      - run: pytest -v -m "not hyperion and not solver"
