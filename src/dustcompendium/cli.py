@@ -122,3 +122,114 @@ def build(
         )
         written += 1
     typer.echo(f"wrote {written} model inputs to {output}" + (f", skipped {skipped}" if skipped else ""))
+
+
+@app.command()
+def run(
+    config: ConfigArgument,
+    models: Annotated[
+        Path, typer.Option("--models", "-m", help="Directory holding the model input files.")
+    ] = Path("models"),
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Directory to write solved models into.")
+    ] = Path("output"),
+    backend: Annotated[
+        str, typer.Option("--scheduler", "-s", help="Where to run: local or slurm.")
+    ] = "local",
+    concurrency: Annotated[int, typer.Option(help="How many models to have in flight at once.")] = 1,
+    tasks: Annotated[int, typer.Option(help="MPI tasks per model; one uses the serial solver.")] = 1,
+    nodes: Annotated[int, typer.Option(help="Nodes per model (slurm).")] = 1,
+    partition: Annotated[str, typer.Option(help="Slurm partition.")] = "",
+    walltime: Annotated[str, typer.Option(help="Slurm time limit, as HH:MM:SS.")] = "",
+    memory_per_cpu: Annotated[
+        int, typer.Option(help="Megabytes per cpu (slurm); 0 leaves it to the site default.")
+    ] = 0,
+    limit: Annotated[int, typer.Option(help="Run at most this many models; 0 runs all.")] = 0,
+) -> None:
+    """Solve a campaign's models.
+
+    Needs the model inputs to exist already, from ``build``, and a Hyperion
+    solver binary on ``PATH``. It needs neither the Hyperion Python package nor
+    a dust file, since everything physical is baked into the inputs.
+
+    Models whose output already exists are skipped, so an interrupted campaign
+    is resumed by running this again.
+    """
+    from .campaign import Campaign
+    from .config import load_campaign
+    from .runner import SCHEDULERS, Job, Resources, scheduler, solver_command
+
+    if backend not in SCHEDULERS:
+        typer.echo(
+            f"unknown scheduler {backend!r}; known schedulers are {', '.join(sorted(SCHEDULERS))}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    campaign = Campaign(load_campaign(str(config)))
+    output.mkdir(parents=True, exist_ok=True)
+    logs = output / "logs"
+
+    if tasks % nodes:
+        typer.echo(
+            f"--tasks {tasks} does not divide evenly among --nodes {nodes}. Give a task "
+            f"count which is a multiple of the node count, such as {nodes * (tasks // nodes + 1)}.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    resources = Resources(
+        nodes=nodes,
+        tasks_per_node=tasks // nodes,
+        partition=partition or None,
+        walltime=walltime or None,
+        memory_per_cpu=memory_per_cpu or None,
+    )
+
+    jobs, missing, done = [], [], 0
+    for candidate in campaign.runs():
+        if limit and len(jobs) >= limit:
+            break
+        source = models / f"{candidate.file_stem}.hdf5"
+        result = output / f"{candidate.file_stem}.rtout"
+        if result.exists():
+            done += 1
+            continue
+        if not source.exists():
+            missing.append(source)
+            continue
+        jobs.append(
+            Job(
+                label=candidate.file_stem,
+                command=solver_command(source, result, tasks=resources.tasks),
+                log_file=logs / f"{candidate.file_stem}.log",
+                resources=resources,
+            )
+        )
+
+    if missing:
+        typer.echo(
+            f"{len(missing)} model inputs are missing, the first being {missing[0]}. "
+            "Run `dust-compendium build` first.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if not jobs:
+        typer.echo(f"nothing to do: all {done} models are already solved")
+        return
+
+    typer.echo(f"running {len(jobs)} models on {backend}" + (f", {done} already solved" if done else ""))
+    finished = 0
+
+    def report(result) -> None:
+        nonlocal finished
+        finished += 1
+        mark = "ok " if result.succeeded else "FAILED"
+        typer.echo(f"  [{finished}/{len(jobs)}] {mark} {result.job.label}")
+
+    results = scheduler(backend, concurrency=concurrency).run(jobs, on_complete=report)
+    failures = [result for result in results if not result.succeeded]
+    typer.echo(f"{len(results) - len(failures)} of {len(results)} models succeeded")
+    for failure in failures:
+        typer.echo(f"  {failure.failure_message()}", err=True)
+    if failures:
+        raise typer.Exit(code=1)
