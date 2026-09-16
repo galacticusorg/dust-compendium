@@ -87,18 +87,28 @@ Reproducing Ferrara et al. (1999) with matched grains, geometry and grids, and
 comparing with their atlas — which is published to two decimal places, so 0.005
 in transmission is the floor on any agreement:
 
-| | disk | spheroid, truncated at 5 R_e |
+Median absolute difference in transmission, over the whole grid:
+
+| | disk | spheroid |
 |---|---|---|
-| the original scripts | 0.0032 | 0.0121 (never truncated) |
-| this package | 0.0034 | 0.0245 |
+| the original scripts | 0.0032 | 0.0121 |
+| this package, truncated at 5 R_e | 0.0034 | 0.0245 |
 
-Median absolute difference in transmission. For the disk, 99.9% of entries agree
-to better than 0.02, and this package reproduces the atlas as well as the
-original scripts do.
+For the disk, 99.9% of entries agree to better than 0.02, and this package
+reproduces the atlas as well as the original scripts do.
 
-The spheroid column is not like for like: the original never applied a
-truncation and the figure above was computed with one. The measured effect of
-the truncation, a median of 0.009 in the same direction, accounts for the
-difference, which is why the Ferrara-matched configuration no longer applies
-one. An untruncated campaign at matched resolution has not been run end to end
-here, so no number is quoted for it.
+The spheroid column there is not like for like: the original never applied a
+truncation, because `spheroidCutOff` was parsed and ignored, and the figure
+beside it was computed with one. Running this package untruncated, and otherwise
+configured as the original was — uniform vertical spacing, density sampled at
+cell centres, a hundred cells each way — settles it. At the three optical depths
+that run shares with the atlas:
+
+| | disk | spheroid |
+|---|---|---|
+| the original scripts | 0.0031 | 0.0129 |
+| this package, truncated at 5 R_e | 0.0037 | 0.0309 |
+| this package, untruncated | 0.0035 | **0.0136** |
+
+So untruncated the spheroid agrees as closely as the original's does, and the
+truncation accounts for the whole of the difference.

@@ -67,6 +67,11 @@ geometry:
         # this package and the original pipeline when both are compared with the
         # atlas.
         #
+        # Confirmed by running this configuration untruncated and otherwise as
+        # the original was: the spheroid then agrees with the atlas to a median
+        # of 0.0136 in transmission, against the original's 0.0129 and the 0.0309
+        # this configuration gives when truncated.
+        #
         # So the published atlas behaves as though the spheroids were not
         # truncated at 4.31 scale radii. Either the 1.16 between scale and
         # effective radius is not the relation Ferrara et al. used, or their
