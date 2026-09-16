@@ -301,3 +301,83 @@ def collect(
         typer.echo(
             f"  {emitter:<12} {result.expected_shape(emitter)}  worst extrapolation residual {scatter}"
         )
+
+
+@app.command()
+def plot(
+    tabulation: Annotated[
+        Path, typer.Argument(exists=True, dir_okay=False, help="A tabulation, as written by collect.")
+    ],
+    emitter: Annotated[str, typer.Option("--emitter", "-e", help="Which component's light.")] = "disk",
+    quantity: Annotated[
+        str, typer.Option("--quantity", "-q", help="extinction, reddening, or curve.")
+    ] = "extinction",
+    against: Annotated[
+        str, typer.Option("--against", "-a", help="Coordinate along the horizontal axis.")
+    ] = "inclination",
+    colour_by: Annotated[
+        str, typer.Option("--colour-by", "-c", help="Draw a family of curves over this coordinate.")
+    ] = "",
+    wavelength: Annotated[float, typer.Option(help="Wavelength for the extinction, in microns.")] = 0.55,
+    fix: Annotated[
+        list[str] | None,
+        typer.Option(help="Hold a coordinate at an index, as name=index. Repeatable."),
+    ] = None,
+    output: Annotated[Path, typer.Option("--output", "-o", help="Where to write the figure.")] = Path(
+        "plot.pdf"
+    ),
+) -> None:
+    """Plot a tabulation.
+
+    Covers what the original's nine plotting scripts did, and the combinations
+    they did not: any quantity against any axis, at any wavelength.
+    """
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        typer.echo("plotting needs matplotlib: install this package with its `plots` extra", err=True)
+        raise typer.Exit(code=1) from None
+
+    from .plots import plot_extinction, plot_extinction_curve
+    from .tabulation import read_tabulation
+
+    held = {}
+    for entry in fix or []:
+        name, _, index = entry.partition("=")
+        if not index.lstrip("-").isdigit():
+            typer.echo(f"--fix expects name=index, got {entry!r}", err=True)
+            raise typer.Exit(code=1)
+        held[name] = int(index)
+
+    table = read_tabulation(str(tabulation))
+    if emitter not in table.emitters:
+        typer.echo(
+            f"no emitter {emitter!r} in this tabulation; it has {', '.join(table.emitters)}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        if quantity == "curve":
+            axes = plot_extinction_curve(table, emitter, colour_by or None, held)
+        else:
+            axes = plot_extinction(
+                table,
+                emitter,
+                against,
+                quantity=quantity,
+                wavelength=wavelength,
+                colour_by=colour_by or None,
+                fixed=held,
+            )
+    except (KeyError, ValueError) as error:
+        # A KeyError's str() carries the repr quotes; its argument does not.
+        typer.echo(str(error.args[0]) if error.args else str(error), err=True)
+        raise typer.Exit(code=1) from None
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    axes.figure.savefig(output)
+    plt.close(axes.figure)
+    typer.echo(f"wrote {output}")
