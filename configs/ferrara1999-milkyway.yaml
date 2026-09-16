@@ -54,11 +54,28 @@ geometry:
         profile: jaffe
         # r_s = 1.16 R_e, for R_e of 0.1, 0.4 and 1.6.
         scaleRadial: [0.116, 0.464, 1.856]
-        # Ferrara et al. truncate at five effective radii, which is 5/1.16 scale
-        # radii. The original wrote 5.8 here, which is 5 times 1.16 rather than
-        # 5 divided by it; since it never applied the value, nothing depended on
-        # which was meant.
-        truncation: 4.3103
+        # Deliberately left untruncated, against what Ferrara et al. describe.
+        #
+        # They truncate at five effective radii, which with r_s = 1.16 R_e is
+        # 4.3103 scale radii. Applying that makes agreement with their atlas
+        # *worse*, not better. Measured by running two campaigns identical but
+        # for this line, with the same seeds -- the disk arrays came out
+        # bit-for-bit identical, so the difference is the truncation alone --
+        # truncating lowers the spheroid transmission everywhere, by a median of
+        # 0.009 and up to 0.08, growing with optical depth as it removes the
+        # outer and least attenuated light. That is the size of the gap between
+        # this package and the original pipeline when both are compared with the
+        # atlas.
+        #
+        # So the published atlas behaves as though the spheroids were not
+        # truncated at 4.31 scale radii. Either the 1.16 between scale and
+        # effective radius is not the relation Ferrara et al. used, or their
+        # truncation is weaker than stated. Until that is settled, matching
+        # their atlas is the thing this configuration is for, and it is matched
+        # better without. Set a truncation here to explore it.
+        #
+        # The original wrote spheroidCutOff: 5.8, which is 5 times 1.16 rather
+        # than 5 divided by it, and then never applied it.
 
 tabulation:
   wavelengths: [0.1250, 0.1515, 0.1775, 0.1995, 0.2215, 0.2480, 0.2895,
