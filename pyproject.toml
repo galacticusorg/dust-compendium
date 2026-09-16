@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name            = "dust-compendium"
-version         = "0.1.0.dev0"
+version         = "0.1.0"
 description     = "Dust attenuation tables for simple galactic geometries, computed with Hyperion"
 readme          = "README.md"
 requires-python = ">=3.11"
@@ -62,16 +62,6 @@ packages = ["src/dustcompendium"]
 line-length    = 110
 target-version = "py311"
 src            = ["src", "tests"]
-# The original 2018 scripts are preserved verbatim in the first commit and are
-# ported in later phases, not linted in place. dustCompendiumAnalysis.py is
-# Python 2 and does not even parse.
-extend-exclude = [
-    "dustCompendiumAnalysis.py",
-    "hyperionBuildModel.py",
-    "hyperionDustFerrara.py",
-    "hyperionExtractOpacity.py",
-    "hyperionExtractWavelengths.py",
-]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "NPY", "RUF"]

@@ -9,6 +9,6 @@ The method is described in `Benson (2018)
 <https://ui.adsabs.harvard.edu/abs/2018RNAAS...2..188B>`_.
 """
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0"
 
 __all__ = ["__version__"]

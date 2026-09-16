@@ -3,16 +3,6 @@
 # ~/Galacticus/gitHooks, inherited from this machine's `init.templateDir`, and
 # installing into it would overwrite the shared Galacticus hooks for every
 # repository on the machine.
-# The original 2018 scripts are preserved verbatim in the first commit; the
-# whitespace and end-of-file hooks must not rewrite them.
-exclude: |
-  (?x)^(
-    dustCompendiumAnalysis\.py|
-    hyperion(BuildModel|DustFerrara|ExtractOpacity|ExtractWavelengths)\.py|
-    (AV|RV|extinctionCurve)Vs[A-Za-z]+\.pl|
-    runModels\.pl
-  )$
-
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.7

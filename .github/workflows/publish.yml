@@ -1,0 +1,41 @@
+# Publishes to PyPI when a release is created.
+#
+# Uses trusted publishing, so there is no token to keep: PyPI has to be told,
+# once, to trust this repository and this workflow. Until that is done the
+# publish step will fail, which is the right way round -- it cannot publish by
+# accident before anyone has decided it should.
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      # Check what is about to be published before publishing it.
+      - run: pip install twine && twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
