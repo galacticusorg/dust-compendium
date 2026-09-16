@@ -24,6 +24,8 @@ so that a single expression covers :math:`R` inside and outside the scale
 radius. The imaginary parts cancel; only the real part is kept.
 """
 
+from functools import cached_property
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy.integrate import quad
@@ -66,10 +68,22 @@ class Spheroid(Profile):
     #: units of the scale radius. Set by each subclass.
     _COLUMN_AT_SCALE_RADIUS: float
 
-    def __init__(self, scale_radial: float) -> None:
+    def __init__(self, scale_radial: float, truncation: float | None = None) -> None:
         if scale_radial <= 0.0:
             raise ValueError(f"scale radius must be positive, got {scale_radial}")
+        if truncation is not None and truncation <= 1.0:
+            raise ValueError(
+                f"truncation must exceed one scale radius, got {truncation}; the optical "
+                "depth is defined along a ray at the scale radius, which a truncation "
+                "inside it would leave empty"
+            )
         self.scale_radial = float(scale_radial)
+        self.truncation = None if truncation is None else float(truncation)
+
+    @property
+    def truncation_radius(self) -> float:
+        """Radius beyond which the density is zero, infinite if untruncated."""
+        return np.inf if self.truncation is None else self.truncation * self.scale_radial
 
     def _shape(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
         """The shape function in units of the scale radius."""
@@ -100,7 +114,10 @@ class Spheroid(Profile):
         z = np.asarray(height, dtype=float)
         x = np.sqrt(r * r + z * z) / self.scale_radial
         with np.errstate(divide="ignore", invalid="ignore"):
-            return self._shape(x)
+            shape = self._shape(x)
+        if self.truncation is not None:
+            shape = np.where(x > self.truncation, 0.0, shape)
+        return shape
 
     def cell_mass(
         self,
@@ -131,7 +148,23 @@ class Spheroid(Profile):
         # Fall back to quadrature wherever the closed form is ill-conditioned.
         # This is rare: on the published grids only a handful of cells qualify,
         # and those which land exactly on a special locus are handled exactly.
-        retry = ~np.isfinite(mass) | self._ill_conditioned(x_lower, x_upper, u_lower, u_upper)
+        if self.truncation is not None:
+            # Cells wholly outside the truncation hold nothing; cells the
+            # truncation sphere passes through are integrated numerically, which
+            # clamps the radial integral to it. Cells wholly inside keep the
+            # closed form, which knows nothing of the truncation.
+            farthest = np.hypot(x_upper, np.maximum(np.abs(u_lower), np.abs(u_upper)))
+            straddles = (u_lower <= 0.0) & (u_upper >= 0.0)
+            nearest = np.hypot(
+                x_lower,
+                np.where(straddles, 0.0, np.minimum(np.abs(u_lower), np.abs(u_upper))),
+            )
+            mass = np.where(nearest >= self.truncation, 0.0, mass)
+            clipped = (farthest > self.truncation) & (nearest < self.truncation)
+        else:
+            clipped = np.zeros(np.shape(mass), dtype=bool)
+
+        retry = ~np.isfinite(mass) | clipped | self._ill_conditioned(x_lower, x_upper, u_lower, u_upper)
         if not np.any(retry):
             return mass
         # Work on flattened copies so that scalar (zero-dimensional) inputs are
@@ -180,15 +213,27 @@ class Spheroid(Profile):
     def _cell_mass_quadrature(self, x_lower: float, x_upper: float, u_lower: float, u_upper: float) -> float:
         """Cell mass by exact integration over radius and quadrature over height."""
 
-        def integrand(u: float) -> float:
-            return float(
-                self._enclosed_annulus(np.hypot(x_upper, u)) - self._enclosed_annulus(np.hypot(x_lower, u))
-            )
+        limit = self.truncation if self.truncation is not None else np.inf
 
-        # A profile diverging on the axis leaves an integrable logarithmic
-        # singularity at u = 0 when the cell reaches the axis; tell the
-        # integrator where it is rather than let it hunt.
-        points = [0.0] if x_lower == 0.0 and u_lower < 0.0 < u_upper else None
+        def integrand(u: float) -> float:
+            # Clamping both radii to the truncation makes the integrand vanish
+            # of its own accord once the whole annulus lies outside it.
+            outer = min(float(np.hypot(x_upper, u)), limit)
+            inner = min(float(np.hypot(x_lower, u)), limit)
+            return float(self._enclosed_annulus(outer) - self._enclosed_annulus(inner))
+
+        # Tell the integrator where the integrand is not smooth, rather than let
+        # it hunt: the integrable logarithmic singularity on the axis, and the
+        # kinks where the truncation sphere crosses either radial wall.
+        breaks = []
+        if x_lower == 0.0 and u_lower < 0.0 < u_upper:
+            breaks.append(0.0)
+        if np.isfinite(limit):
+            for wall in (x_lower, x_upper):
+                if wall < limit:
+                    crossing = float(np.sqrt(limit**2 - wall**2))
+                    breaks.extend(u for u in (-crossing, crossing) if u_lower < u < u_upper)
+        points = sorted(set(breaks)) or None
         value, _ = quad(integrand, u_lower, u_upper, points=points, limit=200, epsabs=1.0e-13, epsrel=1.0e-13)
         return 2.0 * np.pi * self.scale_radial**3 * value
 
@@ -204,12 +249,41 @@ class Spheroid(Profile):
     def optical_depth_radius(self) -> float:
         return self.scale_radial
 
-    @property
+    @cached_property
     def optical_depth_integral(self) -> float:
-        return self._COLUMN_AT_SCALE_RADIUS * self.scale_radial
+        if self.truncation is None:
+            return self._COLUMN_AT_SCALE_RADIUS * self.scale_radial
+        # The ray at the scale radius leaves the truncation sphere at
+        # |z| = r_s sqrt(t^2 - 1), so the column is over a finite range and no
+        # longer the untruncated constant.
+        reach = float(np.sqrt(self.truncation**2 - 1.0))
+
+        def shape(u: float) -> float:
+            return float(self._shape(np.hypot(1.0, u)))
+
+        # The integrand is even in u and sharply peaked at the midplane, falling
+        # as a steep power. Handing the whole range to an adaptive integrator in
+        # one piece loses the peak entirely once the truncation is far out -- at
+        # a thousand scale radii it under-reports by a factor of four -- so
+        # integrate the peak and the tail separately and use the symmetry.
+        peak = min(reach, 10.0)
+        column, _ = quad(shape, 0.0, peak, epsabs=1.0e-14, epsrel=1.0e-13)
+        if reach > peak:
+            # The tail spans decades, so integrate it in log space, where the
+            # range is short and the integrand smooth.
+            tail, _ = quad(
+                lambda w: shape(np.exp(w)) * np.exp(w),
+                np.log(peak),
+                np.log(reach),
+                epsabs=1.0e-14,
+                epsrel=1.0e-13,
+            )
+            column += tail
+        return 2.0 * float(column) * self.scale_radial
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(scale_radial={self.scale_radial!r})"
+        truncation = "" if self.truncation is None else f", truncation={self.truncation!r}"
+        return f"{type(self).__name__}(scale_radial={self.scale_radial!r}{truncation})"
 
 
 class HernquistSpheroid(Spheroid):

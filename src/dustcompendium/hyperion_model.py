@@ -26,7 +26,7 @@ def build_model(
     dust: Any,
     opacity: float | None = None,
     sampling: str = "centre",
-    **grid_options: int,
+    **grid_options: Any,
 ) -> Any:
     """Build a Hyperion model, ready to be written or run.
 
@@ -46,7 +46,7 @@ def build_model(
         :func:`~dustcompendium.model.dust_density`.
     **grid_options
         Passed through to :meth:`~dustcompendium.model.ModelSpec.grid`, for
-        instance to change the number of cells.
+        instance ``spacing="nested"`` or a different number of cells.
 
     Raises
     ------
@@ -110,7 +110,7 @@ def write_model(
     opacity: float | None = None,
     sampling: str = "centre",
     overwrite: bool = True,
-    **grid_options: int,
+    **grid_options: Any,
 ) -> None:
     """Build a model and write it to a Hyperion input file.
 
@@ -122,7 +122,7 @@ def write_model(
     )
 
 
-def emitted_luminosity(spec: ModelSpec, **grid_options: int) -> float:
+def emitted_luminosity(spec: ModelSpec, **grid_options: Any) -> float:
     """Total stellar emission on the grid, in the units the map is built in.
 
     Useful as a check that the grid is large enough to hold the component: it

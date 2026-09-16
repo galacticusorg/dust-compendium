@@ -39,8 +39,18 @@ def vertical_structure(name: str, scale_height: float) -> VerticalStructure:
     return factory(scale_height)
 
 
-def spheroid_profile(name: str, scale_radial: float) -> Spheroid:
+def spheroid_profile(name: str, scale_radial: float, truncation: float | None = None) -> Spheroid:
     """Build a spheroid profile by name.
+
+    Parameters
+    ----------
+    name
+        ``hernquist`` or ``jaffe``.
+    scale_radial
+        The scale radius.
+    truncation
+        Radius, in scale radii, beyond which the density is zero. This is the
+        original's ``spheroidCutOff``, which it parsed and then never used.
 
     Raises
     ------
@@ -53,7 +63,7 @@ def spheroid_profile(name: str, scale_radial: float) -> Spheroid:
     except KeyError:
         known = ", ".join(sorted(SPHEROID_PROFILES))
         raise KeyError(f"unknown spheroid profile {name!r}; known profiles are {known}") from None
-    return factory(scale_radial)
+    return factory(scale_radial, truncation)
 
 
 __all__ = [

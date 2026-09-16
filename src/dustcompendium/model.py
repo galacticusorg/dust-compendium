@@ -12,6 +12,7 @@ well as the disk needs nothing here beyond another entry in the mapping.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -237,6 +238,10 @@ class ModelSpec:
         # own checks when the model is built.
         viewing_angles(self.inclinations)
 
-    def grid(self, **kwargs: int) -> CylindricalGrid:
-        """The grid this model is solved on."""
-        return CylindricalGrid.for_galaxy(self.galaxy, self.cut_off, **kwargs)
+    def grid(self, **options: Any) -> CylindricalGrid:
+        """The grid this model is solved on.
+
+        Options are passed to :meth:`~dustcompendium.grid.CylindricalGrid.for_galaxy`,
+        notably ``spacing`` and the cell counts.
+        """
+        return CylindricalGrid.for_galaxy(self.galaxy, self.cut_off, **options)

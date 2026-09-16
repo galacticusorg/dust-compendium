@@ -217,3 +217,21 @@ class TestModelSpec:
     def test_invalid_specifications_are_rejected(self, kwargs, match):
         with pytest.raises(ValueError, match=match):
             ModelSpec(galaxy(), "disk", {"disk": 1.0}, **kwargs)
+
+
+@pytest.mark.parametrize("spheroid_scale", [1.0, 10.0, 100.0])
+def test_nested_spacing_keeps_the_disk_dust_whatever_the_spheroid(spheroid_scale):
+    """The fix for the large-spheroid failure recorded above.
+
+    On the published grid a spheroid ten times the disk scale length leaves the
+    model with no disk dust at all. Resolving the smallest scale in each
+    direction restores the requested optical depth, at every spheroid size, with
+    the original point sampling untouched.
+    """
+    from dustcompendium.grid import CylindricalGrid
+
+    one = galaxy(spheroid_scale=spheroid_scale)
+    grid = CylindricalGrid.for_galaxy(one, 10.0, spacing="nested")
+    exact = DISK.density_normalization(1.0, 1.0) * DISK.cell_mass(*grid.bounds).sum()
+    density = dust_density(one, grid, {"disk": 1.0}, 1.0, sampling="centre")
+    assert float((density * grid.cell_volumes).sum()) == pytest.approx(exact, rel=0.02)

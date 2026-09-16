@@ -124,6 +124,22 @@ class Galaxy:
         """
         return max(profile.extent_vertical for profile in self._profiles())
 
+    @property
+    def radial_scales(self) -> tuple[float, ...]:
+        """Every component's radial scale, smallest first."""
+        return tuple(sorted(profile.extent_radial for profile in self._profiles()))
+
+    @property
+    def vertical_scales(self) -> tuple[float, ...]:
+        """Every component's vertical scale, smallest first.
+
+        A grid has to reach the largest of these and resolve the smallest. When
+        they differ by orders of magnitude -- a thin dust disk inside a large
+        spheroid -- a uniform vertical grid cannot do both, which is what
+        ``vertical="nested"`` is for.
+        """
+        return tuple(sorted(profile.extent_vertical for profile in self._profiles()))
+
     def _profiles(self) -> Iterator[Profile]:
         for component in self.components:
             if component.stellar is not None:

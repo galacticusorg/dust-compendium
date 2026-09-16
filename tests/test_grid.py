@@ -128,3 +128,71 @@ def test_centres_agree_with_hyperion():
     np.testing.assert_allclose(model.grid.gw, radius, rtol=1.0e-14)
     np.testing.assert_allclose(model.grid.gz, height, rtol=1.0e-14)
     np.testing.assert_allclose(model.grid.volumes, grid.cell_volumes, rtol=1.0e-12)
+
+
+class TestNestedSpacing:
+    """A grid that resolves the smallest scale while reaching the largest.
+
+    The published scheme sizes every cell by the largest component, so a thin
+    disk inside a large spheroid is left unresolved. Hyperion's cylindrical grid
+    takes arbitrary wall positions, so this needs no change of grid type -- its
+    AMR grid is Cartesian, and would cost the cylindrical symmetry.
+    """
+
+    def galaxy(self, spheroid_scale):
+        return Galaxy(
+            [
+                Component(
+                    "disk",
+                    stellar=ExponentialDisk(1.0, SechSquaredVertical(0.137)),
+                    dust=ExponentialDisk(1.0, SechSquaredVertical(0.137)),
+                ),
+                Component("spheroid", stellar=HernquistSpheroid(spheroid_scale)),
+            ]
+        )
+
+    @pytest.mark.parametrize("spheroid_scale", [1.0, 10.0, 100.0])
+    def test_the_finest_cell_resolves_the_smallest_scale(self, spheroid_scale):
+        galaxy = self.galaxy(spheroid_scale)
+        grid = CylindricalGrid.for_galaxy(galaxy, CUT_OFF, spacing="nested")
+        assert np.diff(grid.vertical_walls).min() < galaxy.vertical_scales[0]
+        assert grid.radial_walls[1] < galaxy.radial_scales[0]
+
+    @pytest.mark.parametrize("spheroid_scale", [1.0, 10.0, 100.0])
+    def test_the_grid_still_reaches_the_largest_scale(self, spheroid_scale):
+        galaxy = self.galaxy(spheroid_scale)
+        grid = CylindricalGrid.for_galaxy(galaxy, CUT_OFF, spacing="nested")
+        assert grid.vertical_walls[-1] == pytest.approx(CUT_OFF * galaxy.extent_vertical)
+        assert grid.radial_walls[-1] == pytest.approx(CUT_OFF * galaxy.extent_radial)
+
+    def test_the_published_scheme_does_not_resolve_a_large_spheroid(self):
+        """The behaviour nesting exists to fix, recorded so it cannot regress."""
+        galaxy = self.galaxy(10.0)
+        grid = CylindricalGrid.for_galaxy(galaxy, CUT_OFF)
+        assert np.diff(grid.vertical_walls).min() > 10.0 * galaxy.vertical_scales[0]
+
+    def test_the_midplane_is_still_a_wall(self):
+        grid = CylindricalGrid.for_galaxy(self.galaxy(10.0), CUT_OFF, spacing="nested")
+        assert grid.midplane_is_a_wall
+
+    def test_walls_remain_symmetric_and_increasing(self):
+        grid = CylindricalGrid.for_galaxy(self.galaxy(10.0), CUT_OFF, spacing="nested")
+        np.testing.assert_allclose(grid.vertical_walls, -grid.vertical_walls[::-1], atol=1.0e-12)
+        assert np.all(np.diff(grid.vertical_walls) > 0.0)
+
+    def test_the_two_schemes_agree_when_every_scale_matches(self):
+        """With one vertical and one radial scale there is nothing to nest."""
+        galaxy = Galaxy([Component("disk", stellar=ExponentialDisk(1.0, SechSquaredVertical(1.0)))])
+        published = CylindricalGrid.for_galaxy(galaxy, CUT_OFF)
+        nested = CylindricalGrid.for_galaxy(galaxy, CUT_OFF, spacing="nested")
+        np.testing.assert_allclose(published.vertical_walls, nested.vertical_walls)
+        np.testing.assert_allclose(published.radial_walls, nested.radial_walls)
+
+    def test_volumes_still_tile_the_cylinder(self):
+        grid = CylindricalGrid.for_galaxy(self.galaxy(10.0), CUT_OFF, spacing="nested")
+        enclosing = np.pi * grid.radial_walls[-1] ** 2 * (grid.vertical_walls[-1] - grid.vertical_walls[0])
+        assert grid.cell_volumes.sum() == pytest.approx(enclosing, rel=1.0e-12)
+
+    def test_an_unknown_scheme_is_rejected(self):
+        with pytest.raises(ValueError, match="spacing must be"):
+            CylindricalGrid.for_galaxy(self.galaxy(1.0), CUT_OFF, spacing="adaptive")

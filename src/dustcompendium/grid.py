@@ -29,6 +29,22 @@ __all__ = ["CylindricalGrid"]
 INNER_RADIUS_FRACTION = 1.0e-2
 
 
+def _nested_walls(inner: float, outer: float, cells: int) -> NDArray[np.float64]:
+    """Vertical walls uniform within ``inner`` and logarithmic out to ``outer``.
+
+    Symmetric about the midplane, which is always a wall, so no cell straddles
+    it. Half the cells on each side, and those split evenly between the uniform
+    core and the logarithmic wings.
+    """
+    half = max(cells // 2, 2)
+    core = max(half // 2, 1)
+    wings = half - core
+    positive = np.linspace(0.0, inner, core + 1)
+    if wings > 0:
+        positive = np.hstack([positive, np.logspace(np.log10(inner), np.log10(outer), wings + 1)[1:]])
+    return np.hstack([-positive[::-1], positive[1:]])
+
+
 @dataclass(frozen=True)
 class CylindricalGrid:
     """Cell walls of a cylindrical polar grid, and the quantities derived from them.
@@ -65,6 +81,7 @@ class CylindricalGrid:
         cut_off: float,
         radial_cells: int = 100,
         vertical_cells: int = 100,
+        spacing: str = "published",
     ) -> "CylindricalGrid":
         r"""Build a grid large enough to hold every component of a galaxy.
 
@@ -87,26 +104,54 @@ class CylindricalGrid:
             Number of vertical cells. An *even* number puts a wall on the
             midplane, which is what the published grids do and what keeps any
             cell from straddling it.
+        spacing
+            ``published`` reproduces the original grid exactly: vertical walls
+            spaced uniformly, and the innermost radial wall a hundredth of the
+            *largest* radial scale. ``nested`` instead resolves the smallest
+            scale in each direction, placing the innermost radial wall a
+            hundredth of the smallest radial scale, and spacing vertical walls
+            uniformly out to the cut off of the smallest vertical scale and
+            logarithmically beyond. The two agree when every component is the
+            same size.
+
+            The published scheme cannot resolve a thin disk inside a large
+            spheroid: at a spheroid ten times the disk scale length it leaves
+            cells fifteen dust scale heights thick, and the dust all but
+            vanishes from the model. See
+            :func:`~dustcompendium.model.dust_density`.
+
+        Raises
+        ------
+        ValueError
+            If the cut off or the cell counts are not positive, or if
+            ``spacing`` is not one of the two schemes.
         """
+        if spacing not in ("published", "nested"):
+            raise ValueError(f"spacing must be 'published' or 'nested', got {spacing!r}")
         if cut_off <= 0.0:
             raise ValueError(f"cut off must be positive, got {cut_off}")
         if radial_cells < 2 or vertical_cells < 1:
             raise ValueError("need at least two radial cells and one vertical cell")
         extent_radial = cut_off * galaxy.extent_radial
         extent_vertical = cut_off * galaxy.extent_vertical
+        smallest_radial = galaxy.radial_scales[0] if spacing == "nested" else galaxy.extent_radial
         radial = np.hstack(
             [
                 0.0,
                 np.logspace(
-                    np.log10(INNER_RADIUS_FRACTION * galaxy.extent_radial),
+                    np.log10(INNER_RADIUS_FRACTION * smallest_radial),
                     np.log10(extent_radial),
                     radial_cells,
                 ),
             ]
         )
-        vertical = np.linspace(-extent_vertical, extent_vertical, vertical_cells + 1)
+        scales = galaxy.vertical_scales
+        if spacing == "nested" and scales[0] < scales[-1]:
+            walls = _nested_walls(cut_off * scales[0], extent_vertical, vertical_cells)
+        else:
+            walls = np.linspace(-extent_vertical, extent_vertical, vertical_cells + 1)
         azimuthal = np.linspace(0.0, 2.0 * np.pi, 2)
-        return cls(radial, vertical, azimuthal)
+        return cls(radial, walls, azimuthal)
 
     @property
     def shape(self) -> tuple[int, int, int]:
