@@ -156,6 +156,14 @@ class ExponentialDisk(Profile):
         return 2.0 * np.pi * radial * vertical
 
     @property
+    def extent_radial(self) -> float:
+        return self.scale_radial
+
+    @property
+    def extent_vertical(self) -> float:
+        return self.vertical.scale_height
+
+    @property
     def optical_depth_radius(self) -> float:
         return 0.0
 

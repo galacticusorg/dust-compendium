@@ -87,6 +87,25 @@ class Profile(ABC):
 
     @property
     @abstractmethod
+    def extent_radial(self) -> float:
+        """The scale which should set how far the grid reaches in radius.
+
+        The grid has to cover every component, so it is sized by the largest
+        extent among them. This is that contribution, in the same length unit as
+        the scale lengths.
+        """
+
+    @property
+    @abstractmethod
+    def extent_vertical(self) -> float:
+        """The scale which should set how far the grid reaches above the midplane.
+
+        For a disk this is its scale height; for a spherical profile it is the
+        same scale radius that sets the radial extent.
+        """
+
+    @property
+    @abstractmethod
     def optical_depth_radius(self) -> float:
         r"""Cylindrical radius of the ray along which optical depth is defined.
 

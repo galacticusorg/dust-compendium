@@ -193,6 +193,14 @@ class Spheroid(Profile):
         return 2.0 * np.pi * self.scale_radial**3 * value
 
     @property
+    def extent_radial(self) -> float:
+        return self.scale_radial
+
+    @property
+    def extent_vertical(self) -> float:
+        return self.scale_radial
+
+    @property
     def optical_depth_radius(self) -> float:
         return self.scale_radial
 
