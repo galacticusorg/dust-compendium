@@ -1,0 +1,64 @@
+# The published compendium tabulation for Draine (2003) grains with R_V = 3.1.
+#
+# Reproduces the configuration of the original runModels.pl: an exponential disk
+# with a sech^2 vertical structure, dust following the same distribution, and a
+# Hernquist stellar spheroid tabulated over 51 sizes.
+#
+# Lengths are in units of the disk scale length. The original used a physical
+# disk scale radius of 1e-3 Mpc and noted the results do not depend on it.
+#
+# The vertical scale height is from Kregel, van der Kruit & de Grijs (2002;
+# MNRAS; 334; 646).
+label: compendium:exp:sech:Hernquist:hd0.137:hz0.137:dustD03Rv3.1
+description: >-
+  Exponential disk with sech^2 vertical structure and a Hernquist spheroid,
+  with Draine (2003) R_V = 3.1 grains.
+
+dust:
+  file: hyperion-dust-0.1.0/dust_files/d03_3.1_6.0_A.hdf5
+  description: >-
+    Weingartner & Draine (2001; ApJ; 548; 296) with R_V=3.1
+
+geometry:
+  cutOff: 10.0
+  radialCells: 100
+  verticalCells: 100
+  # `published` and `centre` reproduce the original exactly. See the notes in
+  # dustcompendium.grid and dustcompendium.model: they cannot resolve a thin
+  # disk inside a large spheroid, and `nested` with `average` should be
+  # preferred for anything new.
+  spacing: published
+  sampling: centre
+  components:
+    disk:
+      stellar:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+      dust:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+        opticalDepth:
+          minimum: 0.01
+          maximum: 1.0e4
+          count: 60
+          includeZero: true
+    spheroid:
+      stellar:
+        profile: hernquist
+        scaleRadial:
+          minimum: 1.0e-3
+          maximum: 1.0e2
+          count: 51
+        # The original parsed a spheroid cut off of 10 and then never applied
+        # it; setting it here truncates the profile as was intended.
+        truncation: 10.0
+
+tabulation:
+  wavelengths: {minimum: 0.01, maximum: 3.0, count: 250}
+  inclinations: {minimum: 0.0, maximum: 90.0, count: 46, spacing: linear}
+  photons: 100000
+  seed: -653

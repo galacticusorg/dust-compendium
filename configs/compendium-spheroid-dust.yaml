@@ -1,0 +1,60 @@
+# A tabulation with dust in the spheroid as well as the disk: the extension the
+# published datasets do not cover.
+#
+# Differs from the published configuration in three ways beyond the spheroid
+# dust itself, each deliberate:
+#
+#   * `nested` spacing, because the published grid cannot resolve a thin disk
+#     inside a large spheroid -- at a spheroid ten times the disk scale length
+#     it leaves a model asked for an optical depth of one with one of zero.
+#   * `average` sampling, because a point sample at cell centres loses 7% of the
+#     mass of a cuspy dust profile, and up to 95% in the innermost cell.
+#   * the spheroid truncation is applied, which the original never did.
+#
+# The spheroid's dust is given the same scale radius grid as its stars, so the
+# two are one axis rather than a grid of a size against itself.
+label: compendium:spheroidDust:exp:sech:Hernquist:hd0.137:hz0.137:dustD03Rv3.1
+description: >-
+  As the published Draine (2003) R_V = 3.1 compendium, but with dust in the
+  spheroid as well as the disk, on a grid that resolves both components.
+
+dust:
+  file: hyperion-dust-0.1.0/dust_files/d03_3.1_6.0_A.hdf5
+  description: >-
+    Weingartner & Draine (2001; ApJ; 548; 296) with R_V=3.1
+
+geometry:
+  cutOff: 10.0
+  radialCells: 100
+  verticalCells: 100
+  spacing: nested
+  sampling: average
+  components:
+    disk:
+      stellar:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+      dust:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+        opticalDepth: {minimum: 0.01, maximum: 1.0e4, count: 60, includeZero: true}
+    spheroid:
+      stellar:
+        profile: hernquist
+        scaleRadial: {minimum: 1.0e-3, maximum: 1.0e2, count: 51}
+        truncation: 10.0
+      dust:
+        profile: hernquist
+        scaleRadial: {minimum: 1.0e-3, maximum: 1.0e2, count: 51}
+        truncation: 10.0
+        opticalDepth: {minimum: 0.01, maximum: 1.0e4, count: 6, includeZero: true}
+
+tabulation:
+  wavelengths: {minimum: 0.01, maximum: 3.0, count: 250}
+  inclinations: {minimum: 0.0, maximum: 90.0, count: 46, spacing: linear}
+  photons: 100000
+  seed: -653
