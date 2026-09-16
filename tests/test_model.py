@@ -180,21 +180,36 @@ class TestViewingAngles:
 
 class TestFlatSpectrum:
     def test_flux_is_flat_and_frequency_ascending(self):
-        frequency, flux = flat_spectrum()
+        frequency, flux = flat_spectrum((1.0e12, 1.0e16))
         assert np.all(np.diff(frequency) > 0.0)
         assert np.all(flux == flux[0])
 
-    def test_range_covers_the_requested_wavelengths(self):
-        frequency, _ = flat_spectrum((0.01, 3.0))
-        from dustcompendium.dust import SPEED_OF_LIGHT_ANGSTROMS
-
-        wavelengths = SPEED_OF_LIGHT_ANGSTROMS / frequency / 1.0e4
-        assert wavelengths.min() == pytest.approx(0.01, rel=1.0e-12)
-        assert wavelengths.max() == pytest.approx(3.0, rel=1.0e-12)
+    def test_the_range_is_spanned_exactly(self):
+        frequency, _ = flat_spectrum((1.0e12, 1.0e16))
+        assert frequency.min() == pytest.approx(1.0e12, rel=1.0e-12)
+        assert frequency.max() == pytest.approx(1.0e16, rel=1.0e-12)
 
     def test_an_inverted_range_is_rejected(self):
-        with pytest.raises(ValueError, match="shortest < longest"):
-            flat_spectrum((3.0, 0.01))
+        with pytest.raises(ValueError, match="lowest < highest"):
+            flat_spectrum((1.0e16, 1.0e12))
+
+    @pytest.mark.hyperion
+    def test_the_spectrum_stays_inside_the_dust_frequency_range(self):
+        """A photon outside it aborts the solve, and Hyperion still exits zero.
+
+        Regression: the default range matched the dust's extrapolation range
+        exactly, and rounding put its top frequency 1.5e12 Hz above the dust's.
+        Whether a photon was drawn there was a matter of chance, so a fraction of
+        a campaign's models aborted and were recorded as successes.
+        """
+        from dustcompendium.dust import ferrara
+        from dustcompendium.hyperion_model import spectrum_for
+
+        dust = ferrara.build("milkyWay", 250.0)
+        frequency, _ = spectrum_for(dust)
+        available = dust.optical_properties.nu
+        assert frequency.min() > available.min()
+        assert frequency.max() < available.max()
 
 
 class TestModelSpec:

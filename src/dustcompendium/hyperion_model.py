@@ -18,7 +18,26 @@ import numpy as np
 
 from .model import ModelSpec, dust_density, flat_spectrum, stellar_emission, viewing_angles
 
-__all__ = ["build_model", "emitted_luminosity", "write_model"]
+__all__ = ["build_model", "emitted_luminosity", "spectrum_for", "write_model"]
+
+#: How far inside the dust's frequency range the source spectrum is kept. A
+#: photon at a frequency the dust is not defined at aborts the solve.
+SPECTRUM_MARGIN = 1.0e-6
+
+
+def spectrum_for(dust: Any, points: int = 100) -> tuple[Any, Any]:
+    """A flat source spectrum spanning the dust's own frequency range.
+
+    Kept just inside that range. Sharing an endpoint with the dust is not safe:
+    the two are computed separately and the last floating point digit need not
+    agree, and a photon drawn a whisker outside aborts the solve. Hyperion exits
+    zero when it aborts, so the failure shows up only as a solved model with no
+    SEDs in it.
+    """
+    frequencies = dust.optical_properties.nu
+    lowest = float(np.min(frequencies)) * (1.0 + SPECTRUM_MARGIN)
+    highest = float(np.max(frequencies)) * (1.0 - SPECTRUM_MARGIN)
+    return flat_spectrum((lowest, highest), points=points)
 
 
 def build_model(
@@ -81,7 +100,7 @@ def build_model(
     # An arbitrary normalization: only the ratio of emergent to emitted
     # luminosity is ever used, so it cancels.
     source.luminosity = lsun
-    source.spectrum = flat_spectrum()
+    source.spectrum = spectrum_for(dust)
     source.map = stellar_emission(spec.galaxy, grid, spec.emitter)
 
     model.set_monochromatic(True, wavelengths=spec.wavelengths)

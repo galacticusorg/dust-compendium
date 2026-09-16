@@ -17,7 +17,6 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from .dust import SPEED_OF_LIGHT_ANGSTROMS
 from .galaxy import Galaxy
 from .grid import CylindricalGrid
 
@@ -161,7 +160,7 @@ def viewing_angles(inclinations: NDArray[np.float64]) -> tuple[NDArray, NDArray]
 
 
 def flat_spectrum(
-    wavelength_range: tuple[float, float] = (0.005, 1000.0), points: int = 100
+    frequency_range: tuple[float, float], points: int = 100
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     r"""A flat :math:`F_\nu` source spectrum, as frequency and flux.
 
@@ -171,23 +170,23 @@ def flat_spectrum(
     ``spectrum.txt`` which was never version controlled and is now lost;
     generating it removes that dependency.
 
+    It must lie inside the frequency range the dust's optical properties are
+    defined over. A photon drawn outside it aborts the solve -- and Hyperion
+    still exits zero when it does, so the failure is silent. Callers should take
+    the range from the dust rather than assume one; see
+    :func:`~dustcompendium.hyperion_model.spectrum_for`.
+
     Parameters
     ----------
-    wavelength_range
-        Range to cover, in microns. Should span every wavelength to be
-        tabulated.
+    frequency_range
+        Lowest and highest frequency to cover, in Hz.
     points
         How many frequencies to sample.
     """
-    shortest, longest = wavelength_range
-    if not 0.0 < shortest < longest:
-        raise ValueError(f"need 0 < shortest < longest, got {wavelength_range}")
-    microns_to_angstroms = 1.0e4
-    frequency = np.logspace(
-        np.log10(SPEED_OF_LIGHT_ANGSTROMS / (longest * microns_to_angstroms)),
-        np.log10(SPEED_OF_LIGHT_ANGSTROMS / (shortest * microns_to_angstroms)),
-        points,
-    )
+    lowest, highest = frequency_range
+    if not 0.0 < lowest < highest:
+        raise ValueError(f"need 0 < lowest < highest, got {frequency_range}")
+    frequency = np.logspace(np.log10(lowest), np.log10(highest), points)
     return frequency, np.ones_like(frequency)
 
 

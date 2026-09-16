@@ -25,7 +25,13 @@ V_BAND_WAVELENGTH = 0.55
 
 #: Speed of light in Angstroms per second, for converting the tabulations that
 #: are published against wavelength into the frequencies Hyperion wants.
-SPEED_OF_LIGHT_ANGSTROMS = 2.998e18
+#:
+#: The original rounded this to 2.998e18. The exact value is used here, which
+#: shifts where the Gordon et al. (1997) points sit by 0.003% -- far inside the
+#: four figures they are quoted to. Rounding it also put the top of a source
+#: spectrum built from it just outside the frequency range of a dust model built
+#: from the same numbers, which aborts a solve.
+SPEED_OF_LIGHT_ANGSTROMS = 2.99792458e18
 
 
 def load_dust(file_name: str) -> Any:

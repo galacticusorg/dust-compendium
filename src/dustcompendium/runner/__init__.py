@@ -3,7 +3,7 @@
 from .base import Job, JobResult, Resources, Scheduler
 from .local import LocalScheduler
 from .slurm import SlurmScheduler
-from .solver import SOLVERS, solver_command, which_solver
+from .solver import SOLVERS, is_solved, solver_command, which_solver
 
 #: Schedulers by the name a configuration or the command line uses.
 SCHEDULERS: dict[str, type[Scheduler]] = {
@@ -37,6 +37,7 @@ __all__ = [
     "Resources",
     "Scheduler",
     "SlurmScheduler",
+    "is_solved",
     "scheduler",
     "solver_command",
     "which_solver",

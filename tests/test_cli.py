@@ -128,6 +128,8 @@ class TestRun:
 
     def test_an_already_solved_campaign_does_nothing(self, runner, config, tmp_path):
         """Resuming must not need the solver, or the inputs, for work already done."""
+        import h5py
+
         from dustcompendium.campaign import Campaign
         from dustcompendium.config import load_campaign
 
@@ -135,10 +137,32 @@ class TestRun:
         output.mkdir()
         campaign = Campaign(load_campaign(str(config)))
         for candidate in campaign.runs():
-            (output / f"{candidate.file_stem}.rtout").touch()
+            with h5py.File(output / f"{candidate.file_stem}.rtout", "w") as handle:
+                handle.create_group("Peeled/group_00001")
         result = runner.invoke(app, ["run", str(config), "-m", str(tmp_path / "absent"), "-o", str(output)])
         assert result.exit_code == 0, result.output
         assert "all 9 models are already solved" in result.output
+
+    def test_an_output_with_no_seds_is_solved_again(self, runner, config, tmp_path):
+        """Hyperion aborts and still exits zero, leaving an empty peeled group.
+
+        Counting such a file as solved would skip it on every later run, and the
+        gap would surface only when the tabulation was assembled.
+        """
+        import h5py
+
+        from dustcompendium.campaign import Campaign
+        from dustcompendium.config import load_campaign
+
+        output = tmp_path / "out"
+        output.mkdir()
+        campaign = Campaign(load_campaign(str(config)))
+        for candidate in campaign.runs():
+            with h5py.File(output / f"{candidate.file_stem}.rtout", "w") as handle:
+                handle.create_group("Peeled")
+        result = runner.invoke(app, ["run", str(config), "-m", str(tmp_path / "absent"), "-o", str(output)])
+        assert result.exit_code == 1
+        assert "model inputs are missing" in result.output
 
     @pytest.mark.hyperion
     @pytest.mark.solver

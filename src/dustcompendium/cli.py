@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Annotated
 
+import numpy as np
 import typer
 
 from . import __version__
@@ -157,7 +158,7 @@ def run(
     """
     from .campaign import Campaign
     from .config import load_campaign
-    from .runner import SCHEDULERS, Job, Resources, scheduler, solver_command
+    from .runner import SCHEDULERS, Job, Resources, is_solved, scheduler, solver_command
 
     if backend not in SCHEDULERS:
         typer.echo(
@@ -191,7 +192,7 @@ def run(
             break
         source = models / f"{candidate.file_stem}.hdf5"
         result = output / f"{candidate.file_stem}.rtout"
-        if result.exists():
+        if is_solved(result):
             done += 1
             continue
         if not source.exists():
@@ -227,9 +228,76 @@ def run(
         typer.echo(f"  [{finished}/{len(jobs)}] {mark} {result.job.label}")
 
     results = scheduler(backend, concurrency=concurrency).run(jobs, on_complete=report)
-    failures = [result for result in results if not result.succeeded]
+    # A zero exit status is not proof of a solve: Hyperion aborts on some
+    # conditions and still exits zero, leaving an output with no SEDs in it.
+    aborted = [
+        result
+        for result in results
+        if result.succeeded and not is_solved(output / f"{result.job.label}.rtout")
+    ]
+    for result in aborted:
+        typer.echo(
+            f"  {result.job.label}: the solver exited cleanly but wrote no SEDs; see {result.job.log_file}",
+            err=True,
+        )
+    failures = [result for result in results if not result.succeeded] + aborted
     typer.echo(f"{len(results) - len(failures)} of {len(results)} models succeeded")
     for failure in failures:
         typer.echo(f"  {failure.failure_message()}", err=True)
     if failures:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def collect(
+    config: ConfigArgument,
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Directory holding the solved models.")
+    ] = Path("output"),
+    tabulation: Annotated[
+        Path, typer.Option("--tabulation", "-t", help="File to write the tabulation to.")
+    ] = Path("attenuations.hdf5"),
+) -> None:
+    """Assemble solved models into a tabulation.
+
+    Divides each model by the one with no dust, fits the high optical depth
+    extrapolation, and writes the result. Can be run again at any time: it reads
+    the solved models from disk and holds no state of its own.
+    """
+    from .campaign import Campaign
+    from .config import load_campaign
+    from .dust import ferrara, load_dust, opacity_to_extinction
+    from .postprocess import collect as assemble
+
+    campaign = Campaign(load_campaign(str(config)))
+    grains = campaign.config.dust
+    if grains.file is not None:
+        dust = load_dust(grains.file)
+    else:
+        assert grains.ferrara is not None  # guaranteed by the configuration
+        dust = ferrara.build(grains.ferrara, grains.reference_opacity)
+
+    metadata = {"description": campaign.config.description}
+    if grains.description:
+        metadata["dustDescription"] = grains.description
+    for name, component in campaign.config.geometry.components.items():
+        for role, profile in (("stellar", component.stellar), ("dust", component.dust)):
+            if profile is not None:
+                # Recorded so a file says which profiles it was computed for.
+                # Galacticus keeps a hard-coded table of published file names
+                # precisely because the files never said.
+                metadata[f"{name}{role.capitalize()}Profile"] = profile.profile
+    metadata["spacing"] = campaign.config.geometry.spacing
+    metadata["sampling"] = campaign.config.geometry.sampling
+    metadata["cutOff"] = campaign.config.geometry.cut_off
+
+    result = assemble(campaign, output, opacity_to_extinction(dust), metadata=metadata)
+    result.write(str(tabulation))
+    typer.echo(f"wrote format version {result.format_version} tabulation to {tabulation}")
+    for emitter in result.emitters:
+        worst = result.residual[emitter]
+        finite = worst[np.isfinite(worst)] if worst.size else worst
+        scatter = f"{finite.max():.3g}" if finite.size else "n/a"
+        typer.echo(
+            f"  {emitter:<12} {result.expected_shape(emitter)}  worst extrapolation residual {scatter}"
+        )

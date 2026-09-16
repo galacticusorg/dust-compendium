@@ -9,7 +9,7 @@ import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
-__all__ = ["SOLVERS", "solver_command", "which_solver"]
+__all__ = ["SOLVERS", "is_solved", "solver_command", "which_solver"]
 
 #: Solver binaries by grid geometry, serial and MPI. The models here are
 #: cylindrical, so ``cylindrical`` is the one that matters.
@@ -79,3 +79,26 @@ def solver_command(
     prefix = [*launcher, str(tasks)] if tasks > 1 else []
     flags = ["-f"] if overwrite else []
     return [*prefix, binary, *flags, str(source), str(result)]
+
+
+def is_solved(path: Path) -> bool:
+    """Whether a solved model actually holds the SEDs it was meant to produce.
+
+    An exit status of zero is not enough. Hyperion aborts on some conditions --
+    a photon at a frequency its dust is not defined at, for one -- by printing
+    an error and stopping, and *still exits zero*, leaving an output file whose
+    peeled group is empty. Taking the status at face value would record such a
+    model as solved, skip it on every later run, and only surface it as a gap
+    when the tabulation was assembled.
+    """
+    import h5py
+
+    if not path.exists():
+        return False
+    try:
+        with h5py.File(path, "r") as handle:
+            groups = handle.get("Peeled")
+            return bool(groups is not None and len(groups) > 0)
+    except OSError:
+        # A truncated or unreadable file is not a solved one.
+        return False
