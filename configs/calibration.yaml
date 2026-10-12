@@ -1,0 +1,80 @@
+# A calibration campaign, for sizing a real one on a machine you have not used
+# before. Not science: its grids are far too coarse to tabulate anything.
+#
+# Twelve models at production settings -- a hundred cells each way, a hundred
+# thousand photons, forty-six inclinations -- spanning the optical depth range
+# in both the disk and the spheroid, with the spheroid size held fixed.
+#
+# Spanning the range is the point. Cost rises steeply with optical depth: with a
+# Milky Way albedo near 0.6 a photon scatters many times before it is absorbed,
+# so the models at tau = 10^4 cost far more than those at tau = 1, and a real
+# campaign's cost is dominated by that tail. An average-model estimate taken
+# from a middling model would be badly wrong.
+#
+# How to use it:
+#
+#   # Four cheapest models first, as a smoke test of the scheduler.
+#   dust-compendium build configs/calibration.yaml -o cal_models
+#   dust-compendium run   configs/calibration.yaml -m cal_models -o cal_out \
+#       --scheduler slurm --limit 4 --partition <...> --walltime <...>
+#
+#   # Then the rest, and time them.
+#   dust-compendium run   configs/calibration.yaml -m cal_models -o cal_out \
+#       --scheduler slurm --concurrency 12 --partition <...> --walltime <...>
+#
+# Each solver writes "Total CPU time elapsed" at the end of its log, in
+# cal_out/logs, which is what to collect. Also record the size of the .rtout
+# files: at 250 wavelengths and 92 peel-off directions they are not small, and
+# storage may bind before processor time does.
+#
+# Then run configs/calibration-25lambda.yaml, which differs only in having two
+# and a half times the wavelengths. The transfer is monochromatic, so the photon
+# loop runs once per wavelength and the cost should scale very nearly linearly
+# up to the 250 a real campaign uses. Worth confirming rather than assuming,
+# since the whole extrapolation rests on it.
+label: calibration:10lambda
+description: Timing calibration at production settings. Not a science tabulation.
+
+dust:
+  ferrara: milkyWay
+  referenceOpacity: 1.0
+  description: Gordon et al. (1997) Milky Way grains, for calibration only.
+
+geometry:
+  cutOff: 10.0
+  radialCells: 100
+  verticalCells: 100
+  spacing: nested
+  sampling: average
+  components:
+    disk:
+      stellar:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+      dust:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+        # Ascending, so that `--limit 4` takes the four with the lowest
+        # disk optical depth -- quick enough for a smoke test, though two
+        # of them carry spheroid dust and so are not free.
+        opticalDepth: [0.0, 1.0, 10000.0]
+    spheroid:
+      stellar:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+      dust:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+        opticalDepth: [0.0, 100.0]
+
+tabulation:
+  wavelengths: {minimum: 0.01, maximum: 3.0, count: 10}
+  inclinations: {minimum: 0.0, maximum: 90.0, count: 46, spacing: linear}
+  photons: 100000
+  seed: -653
