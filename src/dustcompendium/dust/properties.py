@@ -10,6 +10,8 @@ Importing this module does not require Hyperion; calling into it does.
 
 from typing import TYPE_CHECKING, Any
 
+from .._hyperion import missing_hyperion
+
 if TYPE_CHECKING:  # pragma: no cover - import only for type checking
     pass
 
@@ -53,10 +55,7 @@ def load_dust(file_name: str) -> Any:
     try:
         from hyperion.dust import SphericalDust
     except ImportError as error:  # pragma: no cover - depends on the environment
-        raise ImportError(
-            "reading a dust file needs Hyperion, which is not installed; "
-            "see the installation notes in the README"
-        ) from error
+        raise missing_hyperion("reading a dust file") from error
     dust = SphericalDust()
     dust.read(file_name)
     return dust

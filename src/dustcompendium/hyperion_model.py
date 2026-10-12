@@ -16,6 +16,7 @@ from typing import Any
 
 import numpy as np
 
+from ._hyperion import missing_hyperion
 from .model import ModelSpec, dust_density, flat_spectrum, stellar_emission, viewing_angles
 
 __all__ = ["build_model", "emitted_luminosity", "spectrum_for", "write_model"]
@@ -76,10 +77,7 @@ def build_model(
         from hyperion.model import Model
         from hyperion.util.constants import lsun
     except ImportError as error:  # pragma: no cover - depends on the environment
-        raise ImportError(
-            "building a radiative transfer model needs Hyperion, which is not "
-            "installed; see the installation notes in the README"
-        ) from error
+        raise missing_hyperion("building a radiative transfer model") from error
 
     from .dust import opacity_to_extinction
 

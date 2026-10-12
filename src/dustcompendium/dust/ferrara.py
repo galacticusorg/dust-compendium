@@ -22,6 +22,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from .._hyperion import missing_hyperion
 from .properties import SPEED_OF_LIGHT_ANGSTROMS
 
 __all__ = ["GRAIN_TYPES", "GordonTable", "build", "read_table", "write"]
@@ -126,10 +127,7 @@ def build(grain_type: str, reference_opacity: float = 1.0) -> Any:
     try:
         from hyperion.dust import HenyeyGreensteinDust
     except ImportError as error:  # pragma: no cover - depends on the environment
-        raise ImportError(
-            "building a dust model needs Hyperion, which is not installed; "
-            "see the installation notes in the README"
-        ) from error
+        raise missing_hyperion("building a dust model") from error
     if reference_opacity <= 0.0:
         raise ValueError(f"reference opacity must be positive, got {reference_opacity}")
 

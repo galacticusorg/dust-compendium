@@ -26,6 +26,8 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
+from ._hyperion import missing_hyperion
+
 __all__ = [
     "EXTRAPOLATION_DECADES",
     "attenuation_of",
@@ -64,10 +66,7 @@ def read_sed(path: str | Path) -> tuple[NDArray, NDArray, NDArray]:
     try:
         from hyperion.model import ModelOutput
     except ImportError as error:  # pragma: no cover - depends on the environment
-        raise ImportError(
-            "reading a solved model needs Hyperion, which is not installed; "
-            "see the installation notes in the README"
-        ) from error
+        raise missing_hyperion("reading a solved model") from error
 
     sed = ModelOutput(str(path)).get_sed(uncertainties=True)
     # The aperture axis is present but singular: these are SEDs, not images.

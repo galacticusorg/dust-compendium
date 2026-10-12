@@ -187,3 +187,21 @@ def test_the_tabulation_ships_with_the_package():
     source = resources.files("dustcompendium.dust").joinpath("data/gordon1997.csv")
     assert source.is_file()
     assert "Gordon" in source.read_text(encoding="utf-8")
+
+
+def test_a_missing_hyperion_names_the_interpreter_it_looked_in():
+    """The commonest way for this to go wrong is two environments, not none.
+
+    Having it installed in one and running from another gives exactly the same
+    ImportError as not having it at all, so the message says which interpreter
+    was searched, and which commands need it.
+    """
+    import sys
+
+    from dustcompendium._hyperion import missing_hyperion
+
+    message = str(missing_hyperion("doing something"))
+    assert message.startswith("doing something needs Hyperion")
+    assert sys.executable in message
+    assert "wrong environment" in message
+    assert "`build` and `collect`" in message
