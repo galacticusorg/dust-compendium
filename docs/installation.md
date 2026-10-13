@@ -121,11 +121,9 @@ conda activate dust-compendium
 which h5fc mpif90          # hyperion's configure needs both
 ```
 
-HDF5 brings the Fortran wrappers that `configure` looks for. MPI is needed only
-to satisfy `configure`: with tens of thousands of independent models, one serial
-solver per job is simpler and more efficient than splitting single models across
-ranks, so the MPI solver is never built or run and conda's MPI never competes
-with the site's.
+HDF5 brings the Fortran wrappers that `configure` looks for, and MPI is needed
+both to satisfy `configure` and to build the parallel solver, which a real
+campaign does want -- see below.
 
 ```bash
 pip install dust-compendium
@@ -136,10 +134,44 @@ git submodule update --init --recursive
 pip install .                      # needed by `collect`, not by `run`
 
 ./configure --prefix=$CONDA_PREFIX
-make cyl_serial                    # these models are axisymmetric
+make cyl_serial cyl_mpi            # these models are axisymmetric
 make install
 hyperion_cyl                       # prints its usage line
+hyperion_cyl_mpi
 ```
+
+### Why the parallel solver is not optional
+
+One serial solver per job is the simpler arrangement, and for a campaign of
+cheap models it is the right one. But the solver's cost climbs steeply with
+optical depth, and at the published compendium's grid the most opaque models
+need of order a week on a single core -- past most queue limits, so those models
+would never finish. `run --tasks 16` brings that to around ten hours. It costs
+no more core time; it only converts a wall-clock problem into a core-count one.
+
+Checked rather than assumed: solving the same models serially and under
+`mpirun -np 4` agrees to 0.55 sigma on the stored uncertainties, so the parallel
+solver is not trading accuracy for speed.
+
+### If `configure` cannot find an MPI compiler
+
+```
+configure: error: "h5pfc or mpif90 need to be present"
+```
+
+`configure` searches for exactly two names, `h5pfc` and `mpif90`. It has code
+for `mpifort` as well, but nothing can ever select it, so an installation
+providing only `mpifort` -- Open MPI 5 dropped the `mpif90` wrapper -- fails
+here even though a usable compiler is present. Give it the name it looks for:
+
+```bash
+ln -s $(command -v mpifort) $CONDA_PREFIX/bin/mpif90
+```
+
+With `mpif90` but no `h5pfc`, `configure` compiles the parallel solver as
+`HDF5_FLINKER=mpif90 HDF5_FC=mpif90 h5fc`, which is to say the serial HDF5
+wrapper with the MPI compiler underneath. That works, and needs no
+parallel-HDF5 build; the solver does its own I/O marshalling through ranks.
 
 Build the solvers from the same checkout the Python package was installed from.
 That package writes the model inputs and the solver reads them, and keeping both
