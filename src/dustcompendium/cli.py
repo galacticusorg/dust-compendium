@@ -1,5 +1,7 @@
 """Command line interface."""
 
+import shlex
+import shutil
 from pathlib import Path
 from typing import Annotated
 
@@ -152,6 +154,13 @@ def run(
     ] = "local",
     concurrency: Annotated[int, typer.Option(help="How many models to have in flight at once.")] = 1,
     tasks: Annotated[int, typer.Option(help="MPI tasks per model; one uses the serial solver.")] = 1,
+    launcher: Annotated[
+        str,
+        typer.Option(
+            help="MPI launcher, given the task count after it, such as 'mpirun -np'. By default, "
+            "the mpirun beside the MPI library the solver is linked against."
+        ),
+    ] = "",
     nodes: Annotated[int, typer.Option(help="Nodes per model (slurm).")] = 1,
     partition: Annotated[str, typer.Option(help="Slurm partition.")] = "",
     walltime: Annotated[str, typer.Option(help="Slurm time limit, as HH:MM:SS.")] = "",
@@ -171,7 +180,16 @@ def run(
     """
     from .campaign import Campaign
     from .config import load_campaign
-    from .runner import SCHEDULERS, Job, Resources, is_solved, relink_input, scheduler, solver_command
+    from .runner import (
+        SCHEDULERS,
+        Job,
+        Resources,
+        is_solved,
+        relink_input,
+        scheduler,
+        solver_command,
+        solver_copies,
+    )
 
     if backend not in SCHEDULERS:
         typer.echo(
@@ -191,6 +209,16 @@ def run(
             err=True,
         )
         raise typer.Exit(code=1)
+    prefix = None
+    if launcher:
+        # A batch job runs with whatever PATH it was submitted with, so pin the
+        # launcher down now rather than leave it to be looked up there.
+        prefix = shlex.split(launcher)
+        found = shutil.which(prefix[0]) if prefix else None
+        if found is None:
+            typer.echo(f"the launcher {launcher!r} could not be found", err=True)
+            raise typer.Exit(code=1)
+        prefix[0] = str(Path(found).absolute())
     resources = Resources(
         nodes=nodes,
         tasks_per_node=tasks // nodes,
@@ -214,7 +242,7 @@ def run(
         jobs.append(
             Job(
                 label=candidate.file_stem,
-                command=solver_command(source, result, tasks=resources.tasks),
+                command=solver_command(source, result, tasks=resources.tasks, launcher=prefix),
                 log_file=logs / f"{candidate.file_stem}.log",
                 resources=resources,
             )
@@ -232,15 +260,25 @@ def run(
         return
 
     typer.echo(f"running {len(jobs)} models on {backend}" + (f", {done} already solved" if done else ""))
+    if resources.tasks > 1:
+        typer.echo(f"launching with {shlex.join(jobs[0].command[:2])}")
     finished = 0
 
     def report(result) -> None:
         nonlocal finished
         finished += 1
-        mark = "ok " if result.succeeded else "FAILED"
+        mark = "ok " if result.succeeded and solver_copies(result.job.log_file) <= 1 else "FAILED"
         typer.echo(f"  [{finished}/{len(jobs)}] {mark} {result.job.label}")
 
     results = scheduler(backend, concurrency=concurrency).run(jobs, on_complete=report)
+    # A launcher which does not match the solver's MPI library runs one copy of
+    # the solver per task, all writing the same output. Whatever that output
+    # looks like it is not a solve, so remove it lest a later run skip it.
+    duplicated = [result for result in results if solver_copies(result.job.log_file) > 1]
+    for result in duplicated:
+        (output / f"{result.job.label}.rtout").unlink(missing_ok=True)
+    unlaunched = {result.job.label for result in duplicated}
+    results = [result for result in results if result.job.label not in unlaunched]
     # A zero exit status is not proof of a solve: Hyperion aborts on some
     # conditions and still exits zero, leaving an output with no SEDs in it.
     aborted = [
@@ -259,11 +297,24 @@ def run(
             f"  {result.job.label}: the solver exited cleanly but wrote no SEDs; see {result.job.log_file}",
             err=True,
         )
+    for result in duplicated:
+        typer.echo(
+            f"  {result.job.label}: {solver_copies(result.job.log_file)} separate copies of the solver "
+            "ran instead of one MPI job, so the launcher does not match the solver's MPI library; "
+            f"its output has been removed. See {result.job.log_file}",
+            err=True,
+        )
+    if duplicated:
+        typer.echo(
+            "Name the mpirun from the MPI installation the solver was built with, using --launcher.",
+            err=True,
+        )
     failures = [result for result in results if not result.succeeded] + aborted
-    typer.echo(f"{len(results) - len(failures)} of {len(results)} models succeeded")
+    total = len(results) + len(duplicated)
+    typer.echo(f"{total - len(failures) - len(duplicated)} of {total} models succeeded")
     for failure in failures:
         typer.echo(f"  {failure.failure_message()}", err=True)
-    if failures:
+    if failures or duplicated:
         raise typer.Exit(code=1)
 
 

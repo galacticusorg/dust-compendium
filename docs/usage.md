@@ -88,9 +88,19 @@ failure is never mistaken for jobs having finished.
 optical depth, and for the published compendium's grid the most opaque models
 need about a week serially -- past most queue limits. Sixteen tasks brings that
 to around ten hours. The core-hours are the same either way; only the wall time
-moves. It needs the MPI solver (`hyperion_cyl_mpi`) built, and is launched as
-`mpirun -np <tasks>`, so a site which insists on `srun` needs the command
-adjusted.
+moves. It needs the MPI solver (`hyperion_cyl_mpi`) built.
+
+The solver has to be started by the `mpirun` of the MPI installation it was
+linked against. Any other one -- including an MPICH which a conda environment
+brought along, and which may be first on `PATH` -- starts each task as a
+separate single-rank job, so that sixteen copies of the solver each run the
+whole model and race to write one output. `run` therefore takes the `mpirun`
+from beside the MPI library the solver loads, falling back to `PATH` only when
+there is none, and prints the launcher it chose. `--launcher` overrides it, for
+a site which insists on `srun` for instance: `--launcher 'srun --mpi=pmix -n'`.
+The task count is appended to whatever is given. A model whose log shows more
+than one copy of the solver started is reported as failed, and its output
+removed so that the next run solves it again.
 
 ## Re-running the published compendium
 

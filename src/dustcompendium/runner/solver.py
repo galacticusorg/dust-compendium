@@ -6,11 +6,21 @@ and put on ``PATH``. See the installation notes in the README.
 """
 
 import os
+import re
 import shutil
+import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-__all__ = ["SOLVERS", "is_solved", "relink_input", "solver_command", "which_solver"]
+__all__ = [
+    "SOLVERS",
+    "is_solved",
+    "relink_input",
+    "solver_command",
+    "solver_copies",
+    "which_launcher",
+    "which_solver",
+]
 
 #: Solver binaries by grid geometry, serial and MPI. The models here are
 #: cylindrical, so ``cylindrical`` is the one that matters.
@@ -47,12 +57,48 @@ def which_solver(geometry: str = "cylindrical", parallel: bool = False) -> str:
     return found
 
 
+def which_launcher(binary: str) -> list[str]:
+    """The MPI launcher which matches a solver binary, as a prefix taking the task count.
+
+    An MPI program has to be started by the launcher of the MPI library it was
+    linked against. Any other launcher -- another implementation, or even another
+    installation of the same one -- starts each process as a separate,
+    single-rank job, so that ``mpirun -np 16`` runs sixteen independent copies of
+    the solver, all writing the same output. Whichever ``mpirun`` happens to be
+    first on ``PATH`` is no guide: a conda environment holding the Python side,
+    for one, can bring its own MPICH. So the launcher is looked for beside the
+    MPI library the binary loads, falling back to ``PATH`` only when that cannot
+    be found.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no launcher can be found at all.
+    """
+    try:
+        linked = subprocess.run(["ldd", binary], capture_output=True, text=True, check=False).stdout
+    except OSError:
+        linked = ""
+    match = re.search(r"libmpi\.so\S*\s+=>\s+(\S+)", linked)
+    if match:
+        candidate = Path(match.group(1)).parent.parent / "bin" / "mpirun"
+        if os.access(candidate, os.X_OK):
+            return [str(candidate), "-np"]
+    found = shutil.which("mpirun")
+    if found is None:
+        raise FileNotFoundError(
+            f"no MPI launcher could be found for {binary}: there is no mpirun beside the MPI "
+            "library it loads, nor on PATH. Name one with --launcher."
+        )
+    return [str(Path(found).absolute()), "-np"]
+
+
 def solver_command(
     source: Path,
     result: Path,
     geometry: str = "cylindrical",
     tasks: int = 1,
-    launcher: Sequence[str] = ("mpirun", "-np"),
+    launcher: Sequence[str] | None = None,
     overwrite: bool = True,
 ) -> list[str]:
     """The command which solves one model.
@@ -69,7 +115,8 @@ def solver_command(
     tasks
         Number of MPI tasks. One uses the serial solver and no launcher.
     launcher
-        How to start an MPI job, as a prefix taking the task count.
+        How to start an MPI job, as a prefix taking the task count. By default,
+        the one matching the solver's MPI library; see :func:`which_launcher`.
     overwrite
         Pass the solver's ``-f``, so that an existing output is replaced rather
         than the run refusing.
@@ -77,7 +124,9 @@ def solver_command(
     if tasks < 1:
         raise ValueError(f"tasks must be at least one, got {tasks}")
     binary = which_solver(geometry, parallel=tasks > 1)
-    prefix = [*launcher, str(tasks)] if tasks > 1 else []
+    prefix = []
+    if tasks > 1:
+        prefix = [*(which_launcher(binary) if launcher is None else launcher), str(tasks)]
     flags = ["-f"] if overwrite else []
     return [*prefix, binary, *flags, str(source), str(result)]
 
@@ -133,3 +182,23 @@ def is_solved(path: Path) -> bool:
     except OSError:
         # A truncated or unreadable file is not a solved one.
         return False
+
+
+def solver_copies(log: Path) -> int:
+    """How many copies of the solver wrote to a log.
+
+    Hyperion prints its banner from the first rank only, so a correctly launched
+    MPI run has exactly one ``Started on`` line however many tasks it has. More
+    than one means the launcher did not match the solver's MPI library and each
+    process ran the whole model by itself (see :func:`which_launcher`). Such a
+    run is not a solve whatever its exit status: the copies race to write the
+    same output, and one which happens to finish last can leave a file which
+    looks complete.
+
+    A missing log counts as none.
+    """
+    try:
+        text = log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return 0
+    return len(re.findall(r"^\s*Started on ", text, flags=re.MULTILINE))

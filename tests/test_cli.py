@@ -1,5 +1,7 @@
 """Tests for the command line interface."""
 
+import sys
+
 import pytest
 from typer.testing import CliRunner
 
@@ -163,6 +165,86 @@ class TestRun:
         result = runner.invoke(app, ["run", str(config), "-m", str(tmp_path / "absent"), "-o", str(output)])
         assert result.exit_code == 1
         assert "model inputs are missing" in result.output
+
+    def test_a_mismatched_launcher_is_a_failure_even_when_the_output_looks_solved(
+        self, runner, config, tmp_path, monkeypatch
+    ):
+        """A launcher from the wrong MPI starts one solver copy per task.
+
+        The copies race to write one output, and the last to finish can leave a
+        file holding SEDs and exit zero. That must not count as a solve, and the
+        file must go, or the next run would skip the model as done.
+        """
+        import os
+
+        from dustcompendium.campaign import Campaign
+        from dustcompendium.config import load_campaign
+
+        bin_directory = tmp_path / "bin"
+        bin_directory.mkdir()
+        solver = bin_directory / "hyperion_cyl_mpi"
+        solver.write_text(
+            f"""#!{sys.executable}
+import sys, h5py
+print(" Hyperion v1.0.0")
+print(" Started on 13 October 2026 at 15:31:02")
+with h5py.File(sys.argv[-1], "w") as handle:
+    handle.create_group("Peeled/group_00001")
+"""
+        )
+        launcher = bin_directory / "singletons"
+        launcher.write_text('#!/bin/sh\nn=$1; shift; i=0; while [ $i -lt $n ]; do "$@"; i=$((i+1)); done\n')
+        for script in (solver, launcher):
+            script.chmod(0o755)
+        monkeypatch.setenv("PATH", f"{bin_directory}{os.pathsep}{os.environ['PATH']}")
+
+        models, output = tmp_path / "models", tmp_path / "out"
+        models.mkdir()
+        stem = next(iter(Campaign(load_campaign(str(config))).runs())).file_stem
+        (models / f"{stem}.hdf5").touch()
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                str(config),
+                "-m",
+                str(models),
+                "-o",
+                str(output),
+                "--limit",
+                "1",
+                "--tasks",
+                "4",
+                "--launcher",
+                "singletons",
+            ],
+        )
+        assert result.exit_code == 1, result.output
+        assert "FAILED" in result.output
+        assert "4 separate copies of the solver" in result.output
+        assert "0 of 1 models succeeded" in result.output
+        assert not (output / f"{stem}.rtout").exists()
+
+    def test_an_unknown_launcher_is_reported(self, runner, config, tmp_path):
+        models = tmp_path / "models"
+        models.mkdir()
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                str(config),
+                "-m",
+                str(models),
+                "-o",
+                str(tmp_path / "out"),
+                "--tasks",
+                "4",
+                "--launcher",
+                "no-such-mpirun -np",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "could not be found" in result.output
 
     @pytest.mark.hyperion
     @pytest.mark.solver

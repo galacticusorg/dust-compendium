@@ -3,7 +3,15 @@
 from .base import Job, JobResult, Resources, Scheduler
 from .local import LocalScheduler
 from .slurm import SlurmScheduler
-from .solver import SOLVERS, is_solved, relink_input, solver_command, which_solver
+from .solver import (
+    SOLVERS,
+    is_solved,
+    relink_input,
+    solver_command,
+    solver_copies,
+    which_launcher,
+    which_solver,
+)
 
 #: Schedulers by the name a configuration or the command line uses.
 SCHEDULERS: dict[str, type[Scheduler]] = {
@@ -41,5 +49,7 @@ __all__ = [
     "relink_input",
     "scheduler",
     "solver_command",
+    "solver_copies",
+    "which_launcher",
     "which_solver",
 ]

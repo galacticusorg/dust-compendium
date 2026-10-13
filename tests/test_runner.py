@@ -17,6 +17,8 @@ from dustcompendium.runner import (
     SlurmScheduler,
     scheduler,
     solver_command,
+    solver_copies,
+    which_launcher,
     which_solver,
 )
 from dustcompendium.runner.slurm import batch_script
@@ -56,8 +58,16 @@ class TestSolverCommand:
 
     def test_the_parallel_command_uses_the_launcher_and_mpi_binary(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda name: f"/bin/{name}")
-        command = solver_command(Path("in.hdf5"), Path("out.rtout"), tasks=64)
+        command = solver_command(Path("in.hdf5"), Path("out.rtout"), tasks=64, launcher=("mpirun", "-np"))
         assert command[:4] == ["mpirun", "-np", "64", "/bin/hyperion_cyl_mpi"]
+
+    def test_the_default_launcher_is_the_one_matching_the_binary(self, monkeypatch):
+        monkeypatch.setattr("shutil.which", lambda name: f"/bin/{name}")
+        monkeypatch.setattr(
+            "dustcompendium.runner.solver.which_launcher", lambda binary: [f"{binary}.launcher", "-n"]
+        )
+        command = solver_command(Path("in.hdf5"), Path("out.rtout"), tasks=8)
+        assert command[:4] == ["/bin/hyperion_cyl_mpi.launcher", "-n", "8", "/bin/hyperion_cyl_mpi"]
 
     def test_overwrite_can_be_turned_off(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda name: f"/bin/{name}")
@@ -76,6 +86,74 @@ class TestSolverCommand:
         monkeypatch.setattr("shutil.which", lambda name: f"/bin/{name}")
         with pytest.raises(ValueError, match="at least one"):
             solver_command(Path("a"), Path("b"), tasks=0)
+
+
+def fake_ldd(monkeypatch, libmpi):
+    """Make ``ldd`` report that a binary loads the given MPI library."""
+    listing = (
+        f"\tlibmpi.so.40 => {libmpi} (0x00007f6e0a533000)\n"
+        if libmpi
+        else "\tlibc.so.6 => /lib64/libc.so.6\n"
+    )
+
+    def run(command, **options):
+        assert command[0] == "ldd"
+        return subprocess.CompletedProcess(command, 0, stdout=listing, stderr="")
+
+    monkeypatch.setattr("dustcompendium.runner.solver.subprocess.run", run)
+
+
+class TestWhichLauncher:
+    """The launcher has to come from the MPI installation the solver was linked against.
+
+    Any other one starts each task as its own single-rank job, so that sixteen
+    copies of the solver each run the whole model and race to write one file.
+    """
+
+    def test_it_is_found_beside_the_mpi_library(self, monkeypatch, tmp_path):
+        (tmp_path / "lib").mkdir()
+        (tmp_path / "bin").mkdir()
+        mpirun = tmp_path / "bin" / "mpirun"
+        mpirun.write_text("#!/bin/sh\n")
+        mpirun.chmod(0o755)
+        fake_ldd(monkeypatch, tmp_path / "lib" / "libmpi.so.40")
+        monkeypatch.setattr("shutil.which", lambda name: "/elsewhere/bin/mpirun")
+        assert which_launcher("solver") == [str(mpirun), "-np"]
+
+    def test_it_falls_back_to_path_as_an_absolute_path(self, monkeypatch, tmp_path):
+        fake_ldd(monkeypatch, None)
+        monkeypatch.setattr("shutil.which", lambda name: "relative/bin/mpirun")
+        launcher = which_launcher("solver")
+        assert Path(launcher[0]).is_absolute()
+        assert launcher[0].endswith("relative/bin/mpirun")
+
+    def test_a_library_with_no_launcher_beside_it_falls_back_to_path(self, monkeypatch, tmp_path):
+        fake_ldd(monkeypatch, tmp_path / "lib" / "libmpi.so.40")
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/mpirun")
+        assert which_launcher("solver") == ["/usr/bin/mpirun", "-np"]
+
+    def test_no_launcher_at_all_is_an_error(self, monkeypatch):
+        fake_ldd(monkeypatch, None)
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        with pytest.raises(FileNotFoundError, match="--launcher"):
+            which_launcher("solver")
+
+
+class TestSolverCopies:
+    BANNER = " Hyperion v1.0.0\n Started on 13 October 2026 at 15:31:02\n Input: in.hdf5\n"
+
+    def test_a_correct_mpi_run_has_one_banner(self, tmp_path):
+        log = tmp_path / "log"
+        log.write_text(self.BANNER + " WARNING: no dust present\n" * 2)
+        assert solver_copies(log) == 1
+
+    def test_each_independent_copy_has_its_own_banner(self, tmp_path):
+        log = tmp_path / "log"
+        log.write_text(self.BANNER * 16)
+        assert solver_copies(log) == 16
+
+    def test_a_missing_log_counts_as_none(self, tmp_path):
+        assert solver_copies(tmp_path / "absent") == 0
 
 
 class TestLocalScheduler:
