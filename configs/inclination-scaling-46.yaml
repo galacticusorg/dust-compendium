@@ -1,0 +1,33 @@
+# One of the four inclination-scaling configurations; see
+# configs/inclination-scaling-06.yaml for what they are for and how to run them.
+
+label: inclinationScaling:46
+description: Cost against peel-off direction count, 46 inclinations.
+
+dust:
+  ferrara: milkyWay
+  referenceOpacity: 1.0
+
+geometry:
+  cutOff: 10.0
+  radialCells: 100
+  verticalCells: 100
+  spacing: nested
+  sampling: average
+  components:
+    spheroid:
+      stellar:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+      dust:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+        opticalDepth: [0.0, 100.0]
+
+tabulation:
+  wavelengths: [0.3, 1.0]
+  inclinations: {minimum: 0.0, maximum: 90.0, count: 46, spacing: linear}
+  photons: 20000
+  seed: -653

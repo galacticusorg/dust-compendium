@@ -1,0 +1,61 @@
+# Does the cost of a model scale with the number of peel-off directions?
+#
+# Comparing the calibration with the modified random walk test suggested it
+# does, close to linearly: the runtimes differed by a factor of 133 where
+# wavelengths and photons together account for only 25, and the leftover factor
+# of 5.3 sat close to the ratio of inclination counts, 46 to 10. But those two
+# runs differed in three things at once, so that is a hint rather than a
+# measurement.
+#
+# This varies the inclination count and nothing else. Run all four and plot the
+# elapsed time against the count: if it is linear, halving the inclinations
+# halves a campaign, which is the one lever that costs resolution in a smooth,
+# interpolated axis rather than costing accuracy.
+#
+#   for n in 06 12 23 46; do
+#     dust-compendium build configs/inclination-scaling-$n.yaml -o inc_${n}_models
+#     dust-compendium run   configs/inclination-scaling-$n.yaml \
+#         -m inc_${n}_models -o inc_$n --scheduler slurm --concurrency 2 ...
+#   done
+#   grep -H "Total CPU time elapsed" inc_*/logs/*_1.log
+#
+# The galaxy is a spheroid alone -- stars and dust, no disk -- because the
+# spheroid dust is where the cost is, and dropping the disk halves the models
+# without changing what is being measured. Two models per count: one with dust
+# and one without, the latter being the reference everything is divided by and
+# costing seconds.
+#
+# Everything else is held at the modified random walk test's settings, where the
+# expensive model took about 390 seconds at ten inclinations. Expect roughly
+# 230, 460, 890 and 1780 seconds if the scaling is linear.
+
+label: inclinationScaling:06
+description: Cost against peel-off direction count, 6 inclinations.
+
+dust:
+  ferrara: milkyWay
+  referenceOpacity: 1.0
+
+geometry:
+  cutOff: 10.0
+  radialCells: 100
+  verticalCells: 100
+  spacing: nested
+  sampling: average
+  components:
+    spheroid:
+      stellar:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+      dust:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+        opticalDepth: [0.0, 100.0]
+
+tabulation:
+  wavelengths: [0.3, 1.0]
+  inclinations: {minimum: 0.0, maximum: 90.0, count: 6, spacing: linear}
+  photons: 20000
+  seed: -653
