@@ -192,3 +192,23 @@ def test_custom_inclinations_are_the_ones_recorded():
     for run in list(one.runs())[:3]:
         np.testing.assert_allclose(run.spec.inclinations, expected)
     assert not np.allclose(one.inclinations, np.linspace(0.0, 90.0, len(expected)))
+
+
+def test_the_random_walk_setting_reaches_every_model():
+    """It is a solver setting, so it has to arrive with the model, not the config."""
+    text = (
+        PUBLISHED
+        + """tabulation:
+  mrw: true
+  mrwGamma: 2.5
+"""
+    )
+    one = campaign(text)
+    for run in list(one.runs())[:3]:
+        assert run.spec.mrw is True
+        assert run.spec.mrw_gamma == pytest.approx(2.5)
+
+
+def test_the_random_walk_is_off_by_default():
+    for run in list(campaign().runs())[:3]:
+        assert run.spec.mrw is False

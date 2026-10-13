@@ -23,12 +23,21 @@ geometry:
   cutOff: 10.0
   radialCells: 100
   verticalCells: 100
-  # `published` and `centre` reproduce the original exactly. See the notes in
-  # dustcompendium.grid and dustcompendium.model: they cannot resolve a thin
-  # disk inside a large spheroid, and `nested` with `average` should be
-  # preferred for anything new.
-  spacing: published
-  sampling: centre
+  # Not the original's `published` and `centre`, deliberately.
+  #
+  # Those cannot resolve a thin disk inside a large spheroid. On this grid, with
+  # a cut off of ten and a hundred cells, the disk dust actually present falls to
+  # 21% of what it should be by a spheroid scale radius of 3, and to nothing by
+  # 31.6 -- and twenty of the fifty-one radii below are above 1. The published
+  # tabulations therefore report almost no attenuation of spheroid light at their
+  # large radii, as an artefact rather than as physics.
+  #
+  # `nested` spaces the vertical walls to resolve the smallest scale as well as
+  # reach the largest, and `average` gives each cell the density that puts the
+  # profile's true mass in it. Together they hold the requested optical depth at
+  # every spheroid size here.
+  spacing: nested
+  sampling: average
   components:
     disk:
       stellar:

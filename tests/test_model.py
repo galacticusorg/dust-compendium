@@ -250,3 +250,20 @@ def test_nested_spacing_keeps_the_disk_dust_whatever_the_spheroid(spheroid_scale
     exact = DISK.density_normalization(1.0, 1.0) * DISK.cell_mass(*grid.bounds).sum()
     density = dust_density(one, grid, {"disk": 1.0}, 1.0, sampling="centre")
     assert float((density * grid.cell_volumes).sum()) == pytest.approx(exact, rel=0.02)
+
+
+class TestModifiedRandomWalk:
+    """Off by default, which is what the published tabulations were computed with."""
+
+    def test_it_is_off_unless_asked_for(self):
+        spec = ModelSpec(galaxy(), "disk", {"disk": 1.0})
+        assert spec.mrw is False
+
+    def test_it_can_be_turned_on(self):
+        spec = ModelSpec(galaxy(), "disk", {"disk": 1.0}, mrw=True, mrw_gamma=2.0)
+        assert spec.mrw is True
+        assert spec.mrw_gamma == pytest.approx(2.0)
+
+    def test_a_non_positive_gamma_is_rejected(self):
+        with pytest.raises(ValueError, match="mrw gamma must be positive"):
+            ModelSpec(galaxy(), "disk", {"disk": 1.0}, mrw_gamma=0.0)

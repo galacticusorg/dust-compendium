@@ -225,6 +225,22 @@ class ModelSpec:
     cut_off: float = 10.0
     photons: int = 100000
     seed: int = -1
+    mrw: bool = False
+    """Whether to use Hyperion's modified random walk.
+
+    It speeds up propagation through very optically thick regions by solving a
+    local diffusion problem instead of following every scattering. That is where
+    the cost of these models lies once dust is put in a spheroid: the profiles
+    are cuspy, so the innermost cells carry an enormous optical depth and photons
+    entering them take a very long time to leave.
+
+    It is an approximation, so it has to be checked rather than assumed: a
+    speed-up which moves the attenuation is no use. Off by default, which is what
+    the published tabulations were computed with.
+    """
+    mrw_gamma: float = 1.0
+    """Start the random walk where the nearest cell wall is further than this
+    many Rosseland mean free paths."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "wavelengths", np.atleast_1d(np.asarray(self.wavelengths, float)))
@@ -233,6 +249,8 @@ class ModelSpec:
             raise ValueError("wavelengths must be positive")
         if self.photons <= 0:
             raise ValueError(f"photons must be positive, got {self.photons}")
+        if self.mrw_gamma <= 0.0:
+            raise ValueError(f"mrw gamma must be positive, got {self.mrw_gamma}")
         # Validates the inclinations, and the emitter through stellar_emission's
         # own checks when the model is built.
         viewing_angles(self.inclinations)

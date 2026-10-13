@@ -143,3 +143,28 @@ class TestSolverRoundTrip:
         transmission = attenuated / transparent
         blue, visual = transmission[1]
         assert blue < visual
+
+
+class TestModifiedRandomWalk:
+    def test_the_setting_reaches_the_model_file(self, dust, tmp_path):
+        """Hyperion records it as an attribute, so it can be checked directly."""
+        import h5py
+
+        from dustcompendium.hyperion_model import write_model
+
+        for enabled in (False, True):
+            spec = ModelSpec(
+                galaxy(),
+                "disk",
+                {"disk": 1.0},
+                wavelengths=np.array([0.55]),
+                inclinations=np.array([90.0]),
+                photons=10,
+                mrw=enabled,
+            )
+            path = tmp_path / f"mrw_{enabled}.hdf5"
+            write_model(spec, dust, str(path), radial_cells=5, vertical_cells=5)
+            with h5py.File(path, "r") as handle:
+                assert handle.attrs["mrw"] == (b"yes" if enabled else b"no")
+                if enabled:
+                    assert handle.attrs["mrw_gamma"] == pytest.approx(1.0)

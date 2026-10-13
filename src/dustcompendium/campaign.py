@@ -242,6 +242,8 @@ class Campaign:
                         cut_off=self.config.geometry.cut_off,
                         photons=tabulation.photons,
                         seed=seed,
+                        mrw=tabulation.mrw,
+                        mrw_gamma=tabulation.mrw_gamma,
                     ),
                 )
 

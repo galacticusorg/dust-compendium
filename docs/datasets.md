@@ -32,6 +32,34 @@ emission below the midplane rather than half.
 or above 0.137.** The Ferrara-matched ones escape it, which their agreement with
 Ferrara's own atlas — a median of 0.012 in transmission — bears out.
 
+### The disk dust, at large spheroid radii, in the compendium tabulations
+
+The grid is sized by the largest scale in the model and the dust density is
+sampled at cell centres. A spheroid much larger than the disk therefore leaves
+vertical cells many dust scale heights thick, and the nearest cell centre to the
+midplane sits far out in the tail of the disk's dust, where there is nothing.
+The dust does not thin -- it disappears between the samples.
+
+On the published settings, with a cut off of ten and a hundred cells, the disk
+dust actually present on the grid is:
+
+| spheroid scale radius | fraction of the dust that should be there |
+|---|---|
+| up to 0.137 | 100% |
+| 1 | 97% |
+| 3 | 21% |
+| 10 | 0.003% |
+| 31.6 and above | 0% |
+
+Twenty of the fifty-one published spheroid radii are above 1, and ten are above
+10. For those the model contains almost no disk dust whatever optical depth was
+asked for, so the attenuation of the spheroid's light is reported as near unity
+-- no attenuation -- as a numerical artefact rather than as physics.
+
+**Affected: the `compendium_*` tabulations, at the large end of their spheroid
+size axis.** `spacing: nested` and `sampling: average` together hold the
+requested optical depth at every spheroid size tested.
+
 ### The inclination axis, in the Ferrara-matched tabulations
 
 The driver passed each model's own inclinations to the model builder, so the

@@ -101,6 +101,9 @@ def build_model(
     source.spectrum = spectrum_for(dust)
     source.map = stellar_emission(spec.galaxy, grid, spec.emitter)
 
+    if spec.mrw:
+        model.set_mrw(True, gamma=spec.mrw_gamma)
+
     model.set_monochromatic(True, wavelengths=spec.wavelengths)
     model.set_n_initial_iterations(0)
     model.set_kill_on_absorb(True)

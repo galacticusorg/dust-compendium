@@ -205,6 +205,11 @@ class TabulationConfig(_Base):
     photons: int = Field(default=100000, gt=0)
     seed: int = -653
     """Decremented for each model, so that every one gets its own realization."""
+    mrw: bool = False
+    """Hyperion's modified random walk, which speeds up propagation through very
+    optically thick regions. An approximation: check it against a run without it
+    before trusting a tabulation computed with it."""
+    mrw_gamma: float = Field(default=1.0, gt=0.0)
 
 
 class CampaignConfig(_Base):

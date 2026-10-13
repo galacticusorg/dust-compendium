@@ -1,0 +1,76 @@
+# Does Hyperion's modified random walk make spheroid dust affordable, and does it
+# change the answer?
+#
+# The calibration showed that what makes a spheroid-dust campaign expensive is
+# the dust being cuspy: a model with no disk dust at all but a spheroid optical
+# depth of 100 took 13.8 hours at ten wavelengths, against three minutes with no
+# dust. A Hernquist profile has a formally infinite central density, so the
+# innermost cells carry an enormous optical depth and photons entering them take
+# a very long time to leave.
+#
+# The modified random walk is meant for exactly that: in a very optically thick
+# region it solves a local diffusion problem instead of following every
+# scattering. But it is an approximation, and these models are pure scattering
+# with the photons killed on absorption, which is not the regime it is usually
+# described for. A speed-up which moves the attenuation is no use.
+#
+# So run this and its `mrw: true` twin, and compare both the elapsed times and
+# the tabulations:
+#
+#   dust-compendium build   configs/mrw-test.yaml      -o mrw_off_models
+#   dust-compendium run     configs/mrw-test.yaml      -m mrw_off_models -o mrw_off ...
+#   dust-compendium collect configs/mrw-test.yaml      -o mrw_off -t mrw_off.hdf5
+#   # and the same for configs/mrw-test-on.yaml
+#
+# The tabulations carry their Monte Carlo uncertainties, so the question is
+# whether the two differ by more than those. Both use the same seeds, so a
+# difference is the approximation rather than the noise.
+#
+# Four models each, two of them with the expensive spheroid dust. Cut down from
+# the calibration's settings -- two wavelengths, ten inclinations, a fifth of the
+# photons -- so the expensive ones should take well under an hour rather than
+# fourteen.
+label: mrwTest:off
+description: Modified random walk, off. Compare with mrwTest:on.
+
+dust:
+  ferrara: milkyWay
+  referenceOpacity: 1.0
+
+geometry:
+  cutOff: 10.0
+  radialCells: 100
+  verticalCells: 100
+  spacing: nested
+  sampling: average
+  components:
+    disk:
+      stellar:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+      dust:
+        profile: exponentialDisk
+        verticalStructure: sechSquared
+        scaleRadial: 1.0
+        scaleHeight: 0.137
+        # No disk dust: this isolates the spheroid, which is where the cost is.
+        opticalDepth: [0.0]
+    spheroid:
+      stellar:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+      dust:
+        profile: hernquist
+        scaleRadial: 1.0
+        truncation: 10.0
+        opticalDepth: [0.0, 100.0]
+
+tabulation:
+  wavelengths: [0.3, 1.0]
+  inclinations: {minimum: 0.0, maximum: 90.0, count: 10, spacing: linear}
+  photons: 20000
+  seed: -653
+  mrw: false
