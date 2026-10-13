@@ -232,3 +232,43 @@ class TestChecks:
 
     def test_the_extrapolation_axis_is_the_disk_optical_depth(self):
         assert build().extrapolation_axis == "opticalDepth:disk"
+
+
+class TestExtrapolationAxis:
+    """Which axis the extrapolation was fitted along is recorded, not assumed."""
+
+    def test_it_defaults_to_the_disk_optical_depth(self):
+        """Which is what the published tabulations used."""
+        assert build().extrapolation_axis == "opticalDepth:disk"
+
+    def test_a_campaign_without_disk_dust_can_use_another_axis(self, tmp_path):
+        """Regression: it used to be hardcoded, so such a campaign disagreed with itself.
+
+        The assembly fits along the campaign's first axis, but the shape check
+        excluded the disk's optical depth regardless. A spheroid-only campaign
+        therefore built coefficients of one shape and was told to expect another.
+        """
+        tabulation = build()
+        axes = ("opticalDepth:spheroid", "scaleRadial:spheroid")
+        tabulation.axis_names = axes
+        tabulation.axis_values = {
+            "opticalDepth:spheroid": SPHEROID_DEPTHS,
+            "scaleRadial:spheroid": RADII,
+        }
+        tabulation.emitter_axes = {"spheroid": axes}
+        shape = (WAVELENGTHS.size, INCLINATIONS.size, SPHEROID_DEPTHS.size, RADII.size)
+        tabulation.attenuation = {"spheroid": np.ones(shape)}
+        tabulation.uncertainty = {"spheroid": np.zeros(shape)}
+        trailing = (WAVELENGTHS.size, INCLINATIONS.size, RADII.size)
+        tabulation.extrapolation = {"spheroid": np.zeros((2, *trailing))}
+        tabulation.residual = {"spheroid": np.zeros(trailing)}
+        tabulation.extrapolation_axis = "opticalDepth:spheroid"
+        tabulation.check()
+        path = tmp_path / "spheroid-only.hdf5"
+        tabulation.write(str(path))
+        assert read_tabulation(str(path)).extrapolation_axis == "opticalDepth:spheroid"
+
+    def test_it_survives_a_round_trip(self, tmp_path):
+        path = tmp_path / "attenuations.hdf5"
+        build().write(str(path))
+        assert read_tabulation(str(path)).extrapolation_axis == "opticalDepth:disk"

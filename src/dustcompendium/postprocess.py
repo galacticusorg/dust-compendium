@@ -282,6 +282,9 @@ def collect(
     assert wavelengths is not None  # runs is non-empty, or `missing` would have fired
     inclinations = campaign.inclinations
 
+    # Fit the extrapolation along the first axis, which for a campaign with disk
+    # dust is the disk's optical depth, as the published tabulations used.
+    along = campaign.axes[0].name if campaign.axes else None
     attenuation, uncertainty, extrapolation, residual = {}, {}, {}, {}
     for emitter in campaign.emitters:
         axes = emitter_axes[emitter]
@@ -300,7 +303,6 @@ def collect(
             luminosity[emitter], noise[emitter], reference, reference_noise
         )
 
-        along = campaign.axes[0].name if campaign.axes else None
         position = axes.index(along) if along in axes else None
         if position is None:
             raise ValueError(
@@ -338,5 +340,6 @@ def collect(
         extrapolation=extrapolation,
         residual=residual,
         opacity=opacity,
+        extrapolation_axis=along,
         metadata=metadata or {},
     )

@@ -110,6 +110,16 @@ class Tabulation:
     extrapolation: Mapping[str, NDArray[np.float64]]
     residual: Mapping[str, NDArray[np.float64]]
     opacity: float
+    extrapolation_axis: str = VERSION_ONE_AXES[0]
+    """Which optical depth the high optical depth extrapolation was fitted along.
+
+    The disk's by default, following the published files. With dust in more than
+    one component the choice is not forced, and fitting along the disk's keeps
+    the coefficients tabulated against every other axis, so a spheroid's own
+    optical depth stays bounded by the table rather than being extrapolated
+    through. A campaign with no disk dust at all has to use something else, which
+    is why this is recorded rather than assumed.
+    """
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -168,17 +178,6 @@ class Tabulation:
                     f"extrapolation for {emitter!r} has shape {shape}, "
                     f"but its axes imply {expected_extrapolation}"
                 )
-
-    @property
-    def extrapolation_axis(self) -> str:
-        """Which optical depth the high-depth extrapolation runs along.
-
-        The disk's, following the published files. With dust in more than one
-        component the choice is not forced, and this one keeps the coefficients
-        tabulated against every other axis, so a spheroid's own optical depth
-        stays bounded by the table rather than being extrapolated through.
-        """
-        return VERSION_ONE_AXES[0]
 
     def write(self, path: str) -> None:
         """Write the tabulation to an HDF5 file."""
@@ -278,5 +277,9 @@ def read_tabulation(path: str) -> Tabulation:
             extrapolation=extrapolation,
             residual=residual,
             opacity=float(handle.attrs["opacity"]),
+            extrapolation_axis=campaign_names.get(
+                str(handle.attrs.get("extrapolationAxis", "")),
+                VERSION_ONE_AXES[0],
+            ),
             metadata=metadata,
         )
