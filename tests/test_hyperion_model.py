@@ -210,3 +210,22 @@ class TestDustLinking:
             # And it still resolves, so the model is solvable.
             assert len(list(handle["Dust/dust_001"].keys())) > 0
         assert linked.stat().st_size < embedded.stat().st_size
+
+    def test_linking_the_dust_also_stops_the_output_copying_the_input(self, dust, tmp_path):
+        """Otherwise the saving is undone on the way out.
+
+        The solver copies its whole input, grain optics included, into its
+        output, so outputs stay the size of a self-contained input however the
+        input itself was written.
+        """
+        import h5py
+
+        from dustcompendium.hyperion_model import build_model, write_model
+
+        assert build_model(spec(), dust, dust_file="grains.hdf5").copy_input is False
+        assert build_model(spec(), dust).copy_input is True
+
+        path = tmp_path / "linked.hdf5"
+        write_model(spec(), dust, str(path), dust_file="grains.hdf5", radial_cells=10, vertical_cells=10)
+        with h5py.File(path, "r") as handle:
+            assert handle.attrs["copy_input"].decode() == "no"

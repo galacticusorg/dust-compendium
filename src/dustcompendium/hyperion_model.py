@@ -116,6 +116,13 @@ def build_model(
     if spec.mrw:
         model.set_mrw(True, gamma=spec.mrw_gamma)
 
+    # The solver otherwise copies the whole input -- grain optics included --
+    # into its output, so an output is as large as a self-contained input however
+    # the input itself was written. Linking instead leaves the output holding
+    # only the SEDs, and chains through to the dust file when the input links to
+    # that as well. The input has to stay put for the output to be readable.
+    model.set_copy_input(dust_file is None)
+
     model.set_monochromatic(True, wavelengths=spec.wavelengths)
     model.set_n_initial_iterations(0)
     model.set_kill_on_absorb(True)

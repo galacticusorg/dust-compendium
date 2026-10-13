@@ -63,11 +63,16 @@ prepared the campaign.
 
 It does need the dust file, though, unless the models were built with
 `--embed-dust`. Grain properties are the bulk of a model -- a Draine file is
-12.8 MB against a 0.19 MB model -- so `build` links to them by default rather
-than copying them into every model, which for a campaign of sixteen thousand is
-the difference between three gigabytes and two hundred. The link is relative to
-the model file, so the layout between the models and the dust file has to be the
-same wherever they are solved.
+12.8 MB against a 0.18 MB grid -- so `build` links to them rather than copying
+them into every model, and tells the solver to link its output back to its input
+rather than copying that. Measured at the compendium's settings, the two
+together take a model from 13.0 MB of input and 13.0 MB of output down to 0.18
+and 0.18: for the 15,860-model re-run, 5.8 GB instead of 410.
+
+The links are relative, so the models, the outputs and the dust file have to
+keep the same layout relative to each other wherever they are solved and
+collected, and the inputs have to stay in place until `collect` has run.
+`--embed-dust` turns both off, for a model which has to travel on its own.
 
 ## The grain properties
 
