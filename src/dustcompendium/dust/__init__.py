@@ -1,6 +1,6 @@
 """Dust grain optical properties."""
 
-from . import ferrara
+from . import ferrara, library
 from .properties import (
     SPEED_OF_LIGHT_ANGSTROMS,
     V_BAND_WAVELENGTH,
@@ -12,6 +12,7 @@ __all__ = [
     "SPEED_OF_LIGHT_ANGSTROMS",
     "V_BAND_WAVELENGTH",
     "ferrara",
+    "library",
     "load_dust",
     "opacity_to_extinction",
 ]

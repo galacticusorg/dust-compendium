@@ -205,3 +205,57 @@ def test_a_missing_hyperion_names_the_interpreter_it_looked_in():
     assert sys.executable in message
     assert "wrong environment" in message
     assert "`build` and `collect`" in message
+
+
+class TestGrainLibrary:
+    """Building the Draine and KMH files the compendium configurations need.
+
+    They are published as tabulated optical properties, not as files Hyperion
+    can read, and the ``setup.py build_dust`` command which converts them is
+    written against distutils, which Python 3.12 removed. So they are a hard
+    prerequisite with no working build, which is why this exists.
+    """
+
+    def test_the_five_standard_models_are_known(self):
+        from dustcompendium.dust.library import STANDARD_GRAINS
+
+        assert set(STANDARD_GRAINS) == {
+            "d03_3.1_6.0_A",
+            "d03_4.0_4.0_A",
+            "d03_5.5_3.0_A",
+            "kmh94_3.1_full",
+            "kmh94_3.1_hg",
+        }
+
+    def test_every_compendium_configuration_names_one_of_them(self):
+        """So the command and the configurations cannot drift apart."""
+        from pathlib import Path
+
+        from dustcompendium.config import load_campaign
+        from dustcompendium.dust.library import STANDARD_GRAINS
+
+        configs = Path(__file__).resolve().parent.parent / "configs"
+        for path in sorted(configs.glob("compendium-*.yaml")):
+            named = load_campaign(str(path)).dust.file
+            assert named is not None, path.name
+            assert Path(named).stem in STANDARD_GRAINS, path.name
+
+    def test_a_source_tree_without_inputs_is_reported(self, tmp_path):
+        from dustcompendium.dust.library import build_library
+
+        with pytest.raises(FileNotFoundError, match="does not look like"):
+            build_library(tmp_path, tmp_path / "out")
+
+    def test_an_unknown_grain_model_lists_the_known_ones(self, tmp_path):
+        from dustcompendium.dust.library import build_library
+
+        (tmp_path / "input").mkdir()
+        with pytest.raises(KeyError, match=r"d03_3\.1_6\.0_A"):
+            build_library(tmp_path, tmp_path / "out", names=["mrn77"])
+
+    def test_a_missing_tabulation_is_reported(self, tmp_path):
+        from dustcompendium.dust.library import build_library
+
+        (tmp_path / "input").mkdir()
+        with pytest.raises(FileNotFoundError, match="no tabulation for"):
+            build_library(tmp_path, tmp_path / "out", names=["d03_3.1_6.0_A"])

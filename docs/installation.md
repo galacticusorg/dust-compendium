@@ -48,17 +48,43 @@ one.
 
 ## Which step needs what
 
-| step | Hyperion's Python package | a solver binary |
-|---|---|---|
-| `validate` | no | no |
-| `build` | yes | no |
-| `run` | no | yes |
-| `collect` | yes | no |
-| `plot`, `compare` | no | no |
+| step | Hyperion's Python package | a solver binary | the dust file |
+|---|---|---|---|
+| `validate` | no | no | no |
+| `grains` | yes | no | — |
+| `build` | yes | no | yes |
+| `run` | no | yes | yes, if linked |
+| `collect` | yes | no | yes |
+| `plot`, `compare` | no | no | no |
 
-`run` needs neither the Python package nor a dust file because everything
-physical is already written into the model inputs. A cluster therefore needs a
-much lighter installation than the machine that prepared the campaign.
+`run` needs no Python package: everything physical is written into the model
+inputs, so a cluster needs a much lighter installation than the machine which
+prepared the campaign.
+
+It does need the dust file, though, unless the models were built with
+`--embed-dust`. Grain properties are the bulk of a model -- a Draine file is
+12.8 MB against a 0.19 MB model -- so `build` links to them by default rather
+than copying them into every model, which for a campaign of sixteen thousand is
+the difference between three gigabytes and two hundred. The link is relative to
+the model file, so the layout between the models and the dust file has to be the
+same wherever they are solved.
+
+## The grain properties
+
+The Draine and Kim, Martin & Hendry models the compendium configurations name
+are published as tabulated optical properties rather than as files Hyperion can
+read. The `hyperion-dust` package carries those tabulations with a
+`setup.py build_dust` command to convert them, but that is written against
+distutils, which Python 3.12 removed. So:
+
+```bash
+pip download --no-binary :all: --no-deps hyperion-dust
+tar xzf hyperion-dust-0.1.0.tar.gz
+dust-compendium grains hyperion-dust-0.1.0
+```
+
+That writes the five files into `hyperion-dust-0.1.0/dust_files`, which is where
+the configurations look for them. It takes a couple of seconds.
 
 ## On a cluster
 

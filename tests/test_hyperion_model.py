@@ -168,3 +168,45 @@ class TestModifiedRandomWalk:
                 assert handle.attrs["mrw"] == (b"yes" if enabled else b"no")
                 if enabled:
                     assert handle.attrs["mrw_gamma"] == pytest.approx(1.0)
+
+
+class TestDustLinking:
+    """Whether the grain properties are copied into each model or linked to.
+
+    They are the bulk of a model input -- a Draine file is 12.8 MB against a
+    0.19 MB model -- so a campaign of sixteen thousand models carries two
+    hundred gigabytes of the same table copied over and over if they are
+    embedded, against three gigabytes if they are linked.
+    """
+
+    def test_embedding_is_the_default(self, dust, tmp_path):
+        import h5py
+
+        from dustcompendium.hyperion_model import write_model
+
+        path = tmp_path / "embedded.hdf5"
+        write_model(spec(), dust, str(path), radial_cells=10, vertical_cells=10)
+        with h5py.File(path, "r") as handle:
+            link = handle.get("Dust/dust_001", getlink=True)
+            assert not isinstance(link, h5py.ExternalLink)
+
+    def test_a_dust_file_is_linked_rather_than_copied(self, dust, tmp_path):
+        import h5py
+
+        from dustcompendium.dust import ferrara
+        from dustcompendium.hyperion_model import write_model
+
+        # Write a dust file to link against.
+        grains = tmp_path / "grains.hdf5"
+        ferrara.write("milkyWay", str(grains), reference_opacity=250.0)
+
+        linked = tmp_path / "linked.hdf5"
+        write_model(spec(), dust, str(linked), dust_file=str(grains), radial_cells=10, vertical_cells=10)
+        embedded = tmp_path / "embedded.hdf5"
+        write_model(spec(), dust, str(embedded), radial_cells=10, vertical_cells=10)
+
+        with h5py.File(linked, "r") as handle:
+            assert isinstance(handle.get("Dust/dust_001", getlink=True), h5py.ExternalLink)
+            # And it still resolves, so the model is solvable.
+            assert len(list(handle["Dust/dust_001"].keys())) > 0
+        assert linked.stat().st_size < embedded.stat().st_size

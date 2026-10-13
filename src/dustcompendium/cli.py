@@ -84,6 +84,12 @@ def build(
     ] = Path("models"),
     limit: Annotated[int, typer.Option(help="Write at most this many models; 0 writes all of them.")] = 0,
     overwrite: Annotated[bool, typer.Option(help="Rewrite inputs which already exist.")] = False,
+    embed_dust: Annotated[
+        bool,
+        typer.Option(
+            help="Copy the grain properties into every model, making each self-contained but far larger."
+        ),
+    ] = False,
 ) -> None:
     """Write the Hyperion input files for a campaign.
 
@@ -98,8 +104,14 @@ def build(
 
     campaign = Campaign(load_campaign(str(config)))
     settings = campaign.config.dust
+    reference = None
     if settings.file is not None:
         grains = load_dust(settings.file)
+        # Refer to the grain properties rather than copying them into every
+        # model: they are the bulk of an input file, and a campaign of thousands
+        # would otherwise carry hundreds of gigabytes of the same table. The file
+        # must be at this path when the models are solved.
+        reference = None if embed_dust else settings.file
     else:
         assert settings.ferrara is not None  # guaranteed by the configuration
         grains = ferrara.build(settings.ferrara, settings.reference_opacity)
@@ -119,6 +131,7 @@ def build(
             grains,
             str(path),
             sampling=campaign.config.geometry.sampling,
+            dust_file=reference,
             **options,
         )
         written += 1
@@ -478,3 +491,41 @@ def _draw_comparison(table, published, comparisons, figure: Path, wavelength: fl
     figure.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(figure, dpi=110)
     plt.close(fig)
+
+
+@app.command()
+def grains(
+    source: Annotated[
+        Path,
+        typer.Argument(exists=True, file_okay=False, help="An unpacked hyperion-dust source tree."),
+    ],
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Directory to write the dust files into.")
+    ] = Path("hyperion-dust-0.1.0/dust_files"),
+    overwrite: Annotated[bool, typer.Option(help="Rebuild files which already exist.")] = False,
+) -> None:
+    """Build the standard Hyperion dust files the compendium configurations use.
+
+    The Draine and Kim, Martin & Hendry grain models are published as tabulated
+    optical properties rather than as files Hyperion can read, and the
+    ``setup.py build_dust`` command which converts them is written against
+    distutils, which Python 3.12 removed. This does the same work through the
+    same Hyperion interfaces.
+
+    Download the source from https://pypi.org/project/hyperion-dust/, unpack it,
+    and point this at it. The default output is where the compendium
+    configurations look.
+    """
+    from .dust.library import build_library
+
+    try:
+        written = build_library(source, output, overwrite=overwrite)
+    except (FileNotFoundError, KeyError) as error:
+        typer.echo(str(error.args[0]) if error.args else str(error), err=True)
+        raise typer.Exit(code=1) from None
+    if not written:
+        typer.echo(f"nothing to do: the dust files are already in {output}")
+        return
+    for path in written:
+        typer.echo(f"  wrote {path} ({path.stat().st_size / 1e6:.1f} MB)")
+    typer.echo(f"built {len(written)} dust files in {output}")

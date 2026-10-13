@@ -46,6 +46,7 @@ def build_model(
     dust: Any,
     opacity: float | None = None,
     sampling: str = "centre",
+    dust_file: str | None = None,
     **grid_options: Any,
 ) -> Any:
     """Build a Hyperion model, ready to be written or run.
@@ -64,6 +65,17 @@ def build_model(
     sampling
         How to sample the dust density; see
         :func:`~dustcompendium.model.dust_density`.
+    dust_file
+        Write a reference to this path rather than embedding the grain
+        properties in the model.
+
+        Embedding makes each model self-contained, but the properties are the
+        bulk of it: a Draine file is 12.8 MB, so a campaign of sixteen thousand
+        models carries two hundred gigabytes of the same table copied over and
+        over, against two gigabytes if it is referred to. The file then has to
+        be present, at this path relative to wherever the model is solved, when
+        it is solved. Give a path for a large campaign and leave it out for a
+        self-contained one.
     **grid_options
         Passed through to :meth:`~dustcompendium.model.ModelSpec.grid`, for
         instance ``spacing="nested"`` or a different number of cells.
@@ -91,7 +103,7 @@ def build_model(
 
     model.add_density_grid(
         dust_density(spec.galaxy, grid, spec.optical_depths, opacity, sampling=sampling),
-        dust,
+        dust_file if dust_file is not None else dust,
     )
 
     source = model.add_map_source()
@@ -130,6 +142,7 @@ def write_model(
     opacity: float | None = None,
     sampling: str = "centre",
     overwrite: bool = True,
+    dust_file: str | None = None,
     **grid_options: Any,
 ) -> None:
     """Build a model and write it to a Hyperion input file.
@@ -137,9 +150,11 @@ def write_model(
     The file is then solved by one of the Hyperion solver binaries, which are
     not installed by ``pip``; see the README.
     """
-    build_model(spec, dust, opacity=opacity, sampling=sampling, **grid_options).write(
-        file_name, overwrite=overwrite
-    )
+    model = build_model(spec, dust, opacity=opacity, sampling=sampling, dust_file=dust_file, **grid_options)
+    # `copy=False` links to the grain properties instead of copying them in. The
+    # link is relative to the model file, so the layout between the models and
+    # the dust file has to be the same wherever they are solved.
+    model.write(file_name, overwrite=overwrite, copy=dust_file is None)
 
 
 def emitted_luminosity(spec: ModelSpec, **grid_options: Any) -> float:
