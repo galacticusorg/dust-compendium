@@ -196,3 +196,72 @@ tabulation:
     def test_it_is_a_version_one_tabulation_without_a_spheroid(self, tabulation):
         """One emitter and one axis is not the published layout."""
         assert tabulation.format_version == 2
+
+
+class TestInsufficientDepths:
+    """A campaign can legitimately have too few optical depths to extrapolate."""
+
+    def test_a_single_zero_depth_is_reported_not_crashed_on(self):
+        """Regression: taking the largest of an empty selection raised a numpy error.
+
+        A diagnostic campaign at a single optical depth of zero has nothing
+        positive to fit against. The guard that catches too few depths asked for
+        the largest of them first, which is itself an error when there are none,
+        so the clear message was never reached.
+        """
+        from dustcompendium.postprocess import InsufficientDepths
+
+        with pytest.raises(InsufficientDepths, match="only 0 optical depths"):
+            fit_extrapolation(np.array([0.0]), np.ones((1, 2)))
+
+    def test_it_is_a_value_error_so_existing_handling_still_works(self):
+        from dustcompendium.postprocess import InsufficientDepths
+
+        assert issubclass(InsufficientDepths, ValueError)
+
+    def test_one_positive_depth_is_also_too_few(self):
+        from dustcompendium.postprocess import InsufficientDepths
+
+        with pytest.raises(InsufficientDepths, match="needs at least two"):
+            fit_extrapolation(np.array([0.0, 5.0]), np.ones((2, 2)))
+
+    def test_collect_warns_and_fills_rather_than_refusing(self, tmp_path):
+        """So a diagnostic campaign can still be assembled and looked at."""
+        import warnings
+
+        from dustcompendium.campaign import Campaign
+        from dustcompendium.config import CampaignConfig
+        from dustcompendium.postprocess import collect
+
+        text = """
+label: single
+dust: {ferrara: milkyWay}
+geometry:
+  components:
+    disk:
+      stellar: {profile: exponentialDisk, verticalStructure: sechSquared,
+                scaleRadial: 1.0, scaleHeight: 0.137}
+      dust: {profile: exponentialDisk, verticalStructure: sechSquared,
+             scaleRadial: 1.0, scaleHeight: 0.137, opticalDepth: [0.0]}
+tabulation:
+  wavelengths: [0.55]
+  inclinations: [90.0]
+"""
+        campaign = Campaign(CampaignConfig.from_yaml(text))
+        # Stand in for solved models, so this needs no Hyperion.
+        import dustcompendium.postprocess as postprocess
+
+        def fake(path):
+            return (np.array([0.55]), np.ones((1, 1)), np.full((1, 1), 0.01))
+
+        original, postprocess.read_sed = postprocess.read_sed, fake
+        try:
+            for run in campaign.runs():
+                (tmp_path / f"{run.file_stem}.rtout").touch()
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = collect(campaign, tmp_path, opacity=1.0)
+            assert any("no extrapolation" in str(w.message) for w in caught)
+            assert np.all(np.isnan(result.extrapolation["disk"]))
+        finally:
+            postprocess.read_sed = original

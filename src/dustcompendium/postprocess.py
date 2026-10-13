@@ -20,6 +20,7 @@ seen -- and it is not obvious it holds for a spheroid whose central optical dept
 formally diverges.
 """
 
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from ._hyperion import missing_hyperion
 
 __all__ = [
     "EXTRAPOLATION_DECADES",
+    "InsufficientDepths",
     "attenuation_of",
     "collect",
     "fit_extrapolation",
@@ -39,6 +41,15 @@ __all__ = [
 #: How far below the largest optical depth the extrapolation is fitted over, as
 #: a factor. Ten is the top decade, as in the original.
 EXTRAPOLATION_DECADES = 10.0
+
+
+class InsufficientDepths(ValueError):
+    """Too few optical depths to fit the high optical depth extrapolation.
+
+    Its own class because a campaign can legitimately be in this position -- a
+    diagnostic run at a single optical depth, say -- and wants collecting
+    anyway, while a campaign meant for use does not and should be told.
+    """
 
 
 def read_sed(path: str | Path) -> tuple[NDArray, NDArray, NDArray]:
@@ -152,9 +163,11 @@ def fit_extrapolation(
     if depths.size != attenuation.shape[0]:
         raise ValueError(f"{depths.size} optical depths against an array of {attenuation.shape[0]}")
     usable = depths > 0.0
-    within = usable & (depths * decades >= depths[usable].max())
+    # Taking the largest of an empty selection is an error in itself, so the
+    # case of no positive depths at all has to be caught before asking.
+    within = usable & (depths * decades >= depths[usable].max()) if np.any(usable) else usable
     if int(np.count_nonzero(within)) < 2:
-        raise ValueError(
+        raise InsufficientDepths(
             f"only {int(np.count_nonzero(within))} optical depths lie within a factor of "
             f"{decades:g} of the largest; the extrapolation needs at least two"
         )
@@ -295,7 +308,21 @@ def collect(
                 "nothing to extrapolate along"
             )
         moved = np.moveaxis(attenuation[emitter], 2 + position, 0)
-        coefficients, scatter = fit_extrapolation(axis_values[along], moved)
+        try:
+            coefficients, scatter = fit_extrapolation(axis_values[along], moved)
+        except InsufficientDepths as error:
+            # A diagnostic campaign may have too few optical depths to fit
+            # anything. Record that as not-a-number rather than refusing to
+            # assemble it at all, and let the caller see it.
+            warnings.warn(
+                f"no extrapolation for {emitter!r}: {error}. The coefficients "
+                "are not-a-number, so this tabulation cannot be used beyond its "
+                "largest tabulated optical depth.",
+                stacklevel=2,
+            )
+            trailing = moved.shape[1:]
+            coefficients = np.full((2, *trailing), np.nan)
+            scatter = np.full(trailing, np.nan)
         extrapolation[emitter] = coefficients
         residual[emitter] = scatter
 
