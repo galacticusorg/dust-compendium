@@ -506,8 +506,13 @@ def grains(
         typer.Argument(exists=True, file_okay=False, help="An unpacked hyperion-dust source tree."),
     ],
     output: Annotated[
-        Path, typer.Option("--output", "-o", help="Directory to write the dust files into.")
-    ] = Path("hyperion-dust-0.1.0/dust_files"),
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Directory to write the dust files into. Defaults to dust_files inside the source tree.",
+        ),
+    ] = None,
     overwrite: Annotated[bool, typer.Option(help="Rebuild files which already exist.")] = False,
 ) -> None:
     """Build the standard Hyperion dust files the compendium configurations use.
@@ -519,10 +524,13 @@ def grains(
     same Hyperion interfaces.
 
     Download the source from https://pypi.org/project/hyperion-dust/, unpack it,
-    and point this at it. The default output is where the compendium
-    configurations look.
+    and point this at it. They land in ``dust_files`` inside that tree, which is
+    where the compendium configurations look for them.
     """
     from .dust.library import build_library
+
+    if output is None:
+        output = source / "dust_files"
 
     try:
         written = build_library(source, output, overwrite=overwrite)

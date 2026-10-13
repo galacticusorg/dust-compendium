@@ -26,6 +26,12 @@ docs/_build/
 *.pbs
 *.log
 
+# An unpacked hyperion-dust source tree, which `dust-compendium grains` reads to
+# build the standard grain files. It is third-party source, 60 MB of tabulated
+# optical constants, and is fetched with `pip download hyperion-dust`.
+/hyperion-dust-*/
+/hyperion-dust-*.tar.gz
+
 # Editor and OS clutter
 .DS_Store
 *~
