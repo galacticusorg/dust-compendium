@@ -259,3 +259,19 @@ class TestGrainLibrary:
         (tmp_path / "input").mkdir()
         with pytest.raises(FileNotFoundError, match="no tabulation for"):
             build_library(tmp_path, tmp_path / "out", names=["d03_3.1_6.0_A"])
+
+    def test_an_already_built_tree_needs_nothing_installed(self, tmp_path):
+        """The checks run before Hyperion is imported, so this works without it.
+
+        Which matters because the whole point of the command is to produce a
+        prerequisite, and re-running it to confirm there is nothing to do should
+        not itself require the dependency.
+        """
+        from dustcompendium.dust.library import STANDARD_GRAINS, build_library
+
+        (tmp_path / "input").mkdir()
+        output = tmp_path / "out"
+        output.mkdir()
+        for name in STANDARD_GRAINS:
+            (output / f"{name}.hdf5").write_bytes(b"")
+        assert build_library(tmp_path, output) == []

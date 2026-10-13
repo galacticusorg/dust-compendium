@@ -72,11 +72,6 @@ def build_library(
     ImportError
         If Hyperion is not installed.
     """
-    try:
-        from hyperion.dust import BHDust, TTsreDust
-    except ImportError as error:  # pragma: no cover - depends on the environment
-        raise missing_hyperion("building the dust library") from error
-
     source, output = Path(source), Path(output)
     if not (source / "input").is_dir():
         raise FileNotFoundError(
@@ -89,9 +84,11 @@ def build_library(
             known = ", ".join(sorted(STANDARD_GRAINS))
             raise KeyError(f"unknown grain model {name!r}; known models are {known}")
 
-    readers: dict[str, Any] = {"bhmie": BHDust, "whitney": TTsreDust}
-    output.mkdir(parents=True, exist_ok=True)
-    written = []
+    # Work out what there is to do, and check the inputs for it are present,
+    # before asking for Hyperion. A wrong path or an unknown grain name should
+    # be reported as what it is rather than as a missing dependency, and a tree
+    # which is already built needs nothing installed at all.
+    pending = []
     for name in names or list(STANDARD_GRAINS):
         kind, location = STANDARD_GRAINS[name]
         destination = output / f"{name}.hdf5"
@@ -101,6 +98,19 @@ def build_library(
         # The tabulations are a prefix, with the properties in sibling files.
         if not any(tabulation.parent.glob(f"{tabulation.name}*")):
             raise FileNotFoundError(f"no tabulation for {name} at {tabulation}")
+        pending.append((kind, tabulation, destination))
+    if not pending:
+        return []
+
+    try:
+        from hyperion.dust import BHDust, TTsreDust
+    except ImportError as error:  # pragma: no cover - depends on the environment
+        raise missing_hyperion("building the dust library") from error
+
+    readers: dict[str, Any] = {"bhmie": BHDust, "whitney": TTsreDust}
+    output.mkdir(parents=True, exist_ok=True)
+    written = []
+    for kind, tabulation, destination in pending:
         dust = readers[kind](str(tabulation))
         dust.optical_properties.extrapolate_wav(*EXTRAPOLATION_RANGE)
         dust.write(str(destination))
