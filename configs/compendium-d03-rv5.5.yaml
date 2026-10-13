@@ -68,6 +68,13 @@ geometry:
 
 tabulation:
   wavelengths: {minimum: 0.01, maximum: 3.0, count: 250}
-  inclinations: {minimum: 0.0, maximum: 90.0, count: 46, spacing: linear}
+  # Twenty-three points spaced uniformly in the cosine of the inclination,
+  # rather than the original's forty-six spaced uniformly in the angle. Measured
+  # on a disk at optical depths of 1, 10 and 100, this interpolates as accurately
+  # as the forty-six did -- worst error 0.0034 in transmission against a Monte
+  # Carlo noise floor of 0.004 -- while halving the cost, which is very nearly
+  # linear in the number of peel-off directions. It is also the grid randomly
+  # oriented galaxies are uniform on.
+  inclinations: {minimum: 0.0, maximum: 90.0, count: 23, spacing: cosine}
   photons: 100000
   seed: -653
