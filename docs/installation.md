@@ -69,10 +69,11 @@ rather than copying that. Measured at the compendium's settings, the two
 together take a model from 13.0 MB of input and 13.0 MB of output down to 0.18
 and 0.18: for the 15,860-model re-run, 5.8 GB instead of 410.
 
-The links are relative, so the models, the outputs and the dust file have to
-keep the same layout relative to each other wherever they are solved and
-collected, and the inputs have to stay in place until `collect` has run.
-`--embed-dust` turns both off, for a model which has to travel on its own.
+Both links are relative, so the dust file, the models and the outputs can be
+moved or copied anywhere as long as they travel together and keep their layout
+relative to each other -- solve on a cluster and collect on a laptop, for
+instance. The inputs have to survive until `collect` has run. `--embed-dust`
+turns both links off, for a model which has to travel on its own.
 
 ## The grain properties
 

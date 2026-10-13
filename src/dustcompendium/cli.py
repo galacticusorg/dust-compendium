@@ -171,7 +171,7 @@ def run(
     """
     from .campaign import Campaign
     from .config import load_campaign
-    from .runner import SCHEDULERS, Job, Resources, is_solved, scheduler, solver_command
+    from .runner import SCHEDULERS, Job, Resources, is_solved, relink_input, scheduler, solver_command
 
     if backend not in SCHEDULERS:
         typer.echo(
@@ -248,6 +248,12 @@ def run(
         for result in results
         if result.succeeded and not is_solved(output / f"{result.job.label}.rtout")
     ]
+    # The solver records the absolute path of a linked input, which would leave
+    # the results readable only from the directory they were solved in.
+    for result in results:
+        if result.succeeded:
+            label = result.job.label
+            relink_input(output / f"{label}.rtout", models / f"{label}.hdf5")
     for result in aborted:
         typer.echo(
             f"  {result.job.label}: the solver exited cleanly but wrote no SEDs; see {result.job.log_file}",

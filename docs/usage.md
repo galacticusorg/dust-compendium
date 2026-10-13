@@ -84,6 +84,50 @@ watches `squeue` and `sacct`. Only this campaign's jobs count towards
 `--concurrency`, so a busy account cannot stall it, and a transient scheduler
 failure is never mistaken for jobs having finished.
 
+`--tasks` matters more than it looks. The solver's cost rises steeply with
+optical depth, and for the published compendium's grid the most opaque models
+need about a week serially -- past most queue limits. Sixteen tasks brings that
+to around ten hours. The core-hours are the same either way; only the wall time
+moves. It needs the MPI solver (`hyperion_cyl_mpi`) built, and is launched as
+`mpirun -np <tasks>`, so a site which insists on `srun` needs the command
+adjusted.
+
+## Re-running the published compendium
+
+`configs/compendium-*.yaml` cover the five published grain models, 3,172 models
+each. They differ from the originals in using 23 inclinations spaced uniformly
+in their cosine rather than 46 spaced uniformly in angle, and `nested` walls
+with `average` sampling rather than the published grid -- see
+[Published datasets](datasets.md) for why the latter is deliberate.
+
+```bash
+# Once: the grain files, which nothing else can produce.
+pip download --no-binary :all: --no-deps hyperion-dust
+tar xzf hyperion-dust-0.1.0.tar.gz
+dust-compendium grains hyperion-dust-0.1.0
+
+for grains in d03-rv3.1 d03-rv4.0 d03-rv5.5 kmh94-hg kmh94-full; do
+    config=configs/compendium-$grains.yaml
+    dust-compendium build   $config -o models/$grains
+    dust-compendium run     $config -m models/$grains -o output/$grains \
+        --scheduler slurm --concurrency 100 --tasks 16 \
+        --partition compute --walltime 24:00:00
+    dust-compendium collect $config -o output/$grains \
+        --tabulation compendium-$grains.hdf5
+done
+```
+
+Keep the three directories -- the dust files, the models and the outputs --
+together, since the links between them are relative to each other. Moving or
+copying the whole tree is fine, and was tested; moving one part out of it is
+not. The inputs have to survive until `collect` has run.
+
+Each step can be interrupted and run again; it picks up what the one before it
+left. Budget around 5.8 GB of disk and, at 250 wavelengths and 100,000 photons,
+of order 0.8 million core-hours for all five -- so measure before committing,
+starting with whether cost really is linear in the number of wavelengths
+(`configs/calibration-25lambda.yaml`), which is assumed and untested.
+
 ## Looking at the result
 
 ```bash

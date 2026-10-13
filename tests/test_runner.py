@@ -271,3 +271,69 @@ class TestFactory:
 
     def test_the_registry_matches_the_factory(self):
         assert set(SCHEDULERS) == {"local", "slurm"}
+
+
+class TestRelinkInput:
+    """Making a solved model's link to its input relative.
+
+    The solver records whatever path it was handed, which is absolute, so
+    without this the results can only be read from the directory they were
+    solved in -- and the chain on to the dust file is only usable if the whole
+    tree can be moved together.
+    """
+
+    def _output_linking_to(self, directory, target):
+        import h5py
+
+        source = directory / "models" / "model.hdf5"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        with h5py.File(source, "w") as handle:
+            handle["Grid"] = [1.0]
+        result = directory / "out" / "model.rtout"
+        result.parent.mkdir(parents=True, exist_ok=True)
+        with h5py.File(result, "w") as handle:
+            handle["Input"] = h5py.ExternalLink(str(target), "/")
+        return source, result
+
+    def test_an_absolute_link_becomes_relative(self, tmp_path):
+        import h5py
+
+        from dustcompendium.runner import relink_input
+
+        source, result = self._output_linking_to(tmp_path, tmp_path / "models" / "model.hdf5")
+        assert relink_input(result, source) is True
+        with h5py.File(result, "r") as handle:
+            assert handle.get("Input", getlink=True).filename == "../models/model.hdf5"
+            # And it still resolves.
+            assert "Grid" in handle["Input"]
+
+    def test_the_results_survive_the_tree_being_moved(self, tmp_path):
+        import shutil
+
+        import h5py
+
+        from dustcompendium.runner import relink_input
+
+        source, result = self._output_linking_to(
+            tmp_path / "here", tmp_path / "here" / "models" / "model.hdf5"
+        )
+        relink_input(result, source)
+        shutil.move(tmp_path / "here", tmp_path / "there")
+        with h5py.File(tmp_path / "there" / "out" / "model.rtout", "r") as handle:
+            assert "Grid" in handle["Input"]
+
+    def test_a_copied_input_has_no_link_to_rewrite(self, tmp_path):
+        import h5py
+
+        from dustcompendium.runner import relink_input
+
+        result = tmp_path / "model.rtout"
+        with h5py.File(result, "w") as handle:
+            handle.create_group("Input")
+        assert relink_input(result, tmp_path / "model.hdf5") is False
+
+    def test_an_unreadable_output_is_not_an_error(self, tmp_path):
+        from dustcompendium.runner import relink_input
+
+        missing = tmp_path / "nothing.rtout"
+        assert relink_input(missing, tmp_path / "model.hdf5") is False

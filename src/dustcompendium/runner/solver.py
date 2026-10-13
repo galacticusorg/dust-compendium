@@ -5,11 +5,12 @@ nor the sdist carries them -- so they have to be built from the Hyperion source
 and put on ``PATH``. See the installation notes in the README.
 """
 
+import os
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
-__all__ = ["SOLVERS", "is_solved", "solver_command", "which_solver"]
+__all__ = ["SOLVERS", "is_solved", "relink_input", "solver_command", "which_solver"]
 
 #: Solver binaries by grid geometry, serial and MPI. The models here are
 #: cylindrical, so ``cylindrical`` is the one that matters.
@@ -79,6 +80,36 @@ def solver_command(
     prefix = [*launcher, str(tasks)] if tasks > 1 else []
     flags = ["-f"] if overwrite else []
     return [*prefix, binary, *flags, str(source), str(result)]
+
+
+def relink_input(result: Path, source: Path) -> bool:
+    """Make a solved model's link to its input relative rather than absolute.
+
+    When the input is linked instead of copied, the solver records the path it
+    was handed, which is absolute -- so copying the results anywhere, to collect
+    them on another machine for instance, leaves every output pointing at a
+    directory which no longer exists. Rewriting the link relative to the output
+    makes the whole tree movable, which is the only form the chain through to
+    the dust file is usable in anyway.
+
+    Returns whether a link was rewritten; a copied input has none.
+    """
+    import h5py
+
+    try:
+        with h5py.File(result, "r+") as handle:
+            link = handle.get("Input", getlink=True)
+            if not isinstance(link, h5py.ExternalLink):
+                return False
+            relative = os.path.relpath(source.resolve(), result.resolve().parent)
+            if link.filename == relative:
+                return False
+            target = link.path
+            del handle["Input"]
+            handle["Input"] = h5py.ExternalLink(relative, target)
+    except OSError:
+        return False
+    return True
 
 
 def is_solved(path: Path) -> bool:
