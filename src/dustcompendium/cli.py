@@ -189,6 +189,8 @@ def run(
         scheduler,
         solver_command,
         solver_copies,
+        which_launcher,
+        which_solver,
     )
 
     if backend not in SCHEDULERS:
@@ -239,6 +241,11 @@ def run(
         if not source.exists():
             missing.append(source)
             continue
+        if prefix is None and tasks > 1:
+            # Once, not per model: finding it runs ldd, and a campaign has
+            # thousands of models. Nor before the loop, so that resuming a
+            # finished campaign still needs no solver.
+            prefix = which_launcher(which_solver(parallel=True))
         jobs.append(
             Job(
                 label=candidate.file_stem,

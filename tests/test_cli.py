@@ -119,6 +119,47 @@ class TestBuild:
         assert len(list(output.glob("*.hdf5"))) == 3
 
 
+def fake_mpi_campaign(config, tmp_path, monkeypatch, models, count):
+    """Put a stand-in MPI solver and launchers on PATH, and inputs for some models.
+
+    The solver prints Hyperion's banner and writes an output holding SEDs.
+    ``singletons`` starts one copy of it per task, as a mismatched launcher does;
+    ``launch`` (given ``-np``) starts one, as a matching one does. Returns the models' stems.
+    """
+    import itertools
+    import os
+
+    from dustcompendium.campaign import Campaign
+    from dustcompendium.config import load_campaign
+
+    bin_directory = tmp_path / "bin"
+    bin_directory.mkdir()
+    solver = bin_directory / "hyperion_cyl_mpi"
+    solver.write_text(
+        f"""#!{sys.executable}
+import sys, h5py
+print(" Hyperion v1.0.0")
+print(" Started on 13 October 2026 at 15:31:02")
+with h5py.File(sys.argv[-1], "w") as handle:
+    handle.create_group("Peeled/group_00001")
+"""
+    )
+    singletons = bin_directory / "singletons"
+    singletons.write_text('#!/bin/sh\nn=$1; shift; i=0; while [ $i -lt $n ]; do "$@"; i=$((i+1)); done\n')
+    launch = bin_directory / "launch"
+    launch.write_text('#!/bin/sh\nshift 2; exec "$@"\n')
+    for script in (solver, singletons, launch):
+        script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_directory}{os.pathsep}{os.environ['PATH']}")
+
+    models.mkdir()
+    runs = Campaign(load_campaign(str(config))).runs()
+    stems = [candidate.file_stem for candidate in itertools.islice(runs, count)]
+    for stem in stems:
+        (models / f"{stem}.hdf5").touch()
+    return stems
+
+
 class TestRun:
     def test_missing_inputs_are_reported_and_fail(self, runner, config, tmp_path):
         result = runner.invoke(
@@ -175,33 +216,8 @@ class TestRun:
         file holding SEDs and exit zero. That must not count as a solve, and the
         file must go, or the next run would skip the model as done.
         """
-        import os
-
-        from dustcompendium.campaign import Campaign
-        from dustcompendium.config import load_campaign
-
-        bin_directory = tmp_path / "bin"
-        bin_directory.mkdir()
-        solver = bin_directory / "hyperion_cyl_mpi"
-        solver.write_text(
-            f"""#!{sys.executable}
-import sys, h5py
-print(" Hyperion v1.0.0")
-print(" Started on 13 October 2026 at 15:31:02")
-with h5py.File(sys.argv[-1], "w") as handle:
-    handle.create_group("Peeled/group_00001")
-"""
-        )
-        launcher = bin_directory / "singletons"
-        launcher.write_text('#!/bin/sh\nn=$1; shift; i=0; while [ $i -lt $n ]; do "$@"; i=$((i+1)); done\n')
-        for script in (solver, launcher):
-            script.chmod(0o755)
-        monkeypatch.setenv("PATH", f"{bin_directory}{os.pathsep}{os.environ['PATH']}")
-
         models, output = tmp_path / "models", tmp_path / "out"
-        models.mkdir()
-        stem = next(iter(Campaign(load_campaign(str(config))).runs())).file_stem
-        (models / f"{stem}.hdf5").touch()
+        (stem,) = fake_mpi_campaign(config, tmp_path, monkeypatch, models, count=1)
         result = runner.invoke(
             app,
             [
@@ -224,6 +240,29 @@ with h5py.File(sys.argv[-1], "w") as handle:
         assert "4 separate copies of the solver" in result.output
         assert "0 of 1 models succeeded" in result.output
         assert not (output / f"{stem}.rtout").exists()
+
+    def test_the_launcher_is_looked_up_once_per_run_not_per_model(
+        self, runner, config, tmp_path, monkeypatch
+    ):
+        """Finding the launcher runs ldd, which took a second a time from a
+        campaign's driver: once per model, 3,172 of them held the run up for
+        most of an hour before it submitted anything."""
+        models, output = tmp_path / "models", tmp_path / "out"
+        stems = fake_mpi_campaign(config, tmp_path, monkeypatch, models, count=3)
+        lookups = []
+
+        def which_launcher(binary):
+            lookups.append(binary)
+            return [str(tmp_path / "bin" / "launch"), "-np"]
+
+        monkeypatch.setattr("dustcompendium.runner.which_launcher", which_launcher)
+        result = runner.invoke(
+            app, ["run", str(config), "-m", str(models), "-o", str(output), "--limit", "3", "--tasks", "4"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "3 of 3 models succeeded" in result.output
+        assert len(lookups) == 1
+        assert all((output / f"{stem}.rtout").exists() for stem in stems)
 
     def test_an_unknown_launcher_is_reported(self, runner, config, tmp_path):
         models = tmp_path / "models"
