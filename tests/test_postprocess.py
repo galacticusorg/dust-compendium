@@ -104,14 +104,69 @@ class TestExtrapolation:
         with pytest.raises(ValueError, match="optical depths against an array"):
             fit_extrapolation(np.array([1.0, 10.0, 100.0]), np.ones((2, 1)))
 
-    def test_a_non_positive_transmission_gives_no_coefficients(self):
-        """A model with nothing escaping cannot be fitted in the log."""
+    def test_a_cell_which_transmits_nothing_is_recorded_as_opaque(self):
+        """Not as not-a-number, which the consumer would propagate.
+
+        Galacticus extrapolates beyond the tabulated depths by default and does
+        not test for NaN, so a cell left unfitted would silently become a NaN
+        attenuation. Recording a floor says the same thing safely.
+        """
+        from dustcompendium.postprocess import OPAQUE_LOG_TRANSMISSION
+
         depths, attenuation = self.perfect()
         attenuation[:, 0, 0] = 0.0
         coefficients, residual = fit_extrapolation(depths, attenuation)
-        assert np.all(np.isnan(coefficients[:, 0, 0]))
+        assert coefficients[0, 0, 0] == OPAQUE_LOG_TRANSMISSION
+        assert coefficients[1, 0, 0] == 0.0
+        # Which evaluates to zero, for any optical depth beyond the table.
+        assert np.exp(coefficients[0, 0, 0] + coefficients[1, 0, 0] * np.log(1.0e8)) < 1.0e-300
+        # The residual stays absent: there was no fit, so there is no residual,
+        # and that keeps these cells identifiable.
         assert np.isnan(residual[0, 0])
         assert np.all(np.isfinite(coefficients[:, 1, 1]))
+
+    def test_partial_underflow_is_opaque_too(self):
+        """Deliberately, and not because it could not be fitted.
+
+        Transmission falls with optical depth, so a cell which has underflowed
+        at the top of the fitting range has only its deep tail left. Lines
+        through numbers that small are noise -- over the Rv3.1 re-run those fits
+        came out with gradients from -2654 to +1236, the positive ones
+        extrapolating to infinite transmission.
+        """
+        from dustcompendium.postprocess import OPAQUE_LOG_TRANSMISSION
+
+        depths, attenuation = self.perfect()
+        within = (depths > 0) & (depths * 10.0 >= depths[depths > 0].max())
+        # Zero only the deepest depth, leaving the rest of the range intact.
+        attenuation[np.flatnonzero(within)[-1], 0, 0] = 0.0
+        coefficients, residual = fit_extrapolation(depths, attenuation)
+        assert coefficients[0, 0, 0] == OPAQUE_LOG_TRANSMISSION
+        assert coefficients[1, 0, 0] == 0.0
+        assert np.isnan(residual[0, 0])
+
+    def test_no_coefficient_is_ever_not_a_number(self):
+        """The property the consumer depends on, over an awkward input."""
+        depths, attenuation = self.perfect()
+        attenuation[:, 0, 0] = 0.0
+        attenuation[-1, 0, 1] = 0.0
+        attenuation[-3:, 1, 2] = 0.0
+        coefficients, _ = fit_extrapolation(depths, attenuation)
+        assert np.isfinite(coefficients).all()
+        # And no cell extrapolates to more light than it started with.
+        for depth in (1.0e4, 1.0e8):
+            assert np.all(np.exp(coefficients[0] + coefficients[1] * np.log(depth)) <= 1.0)
+
+    def test_a_single_positive_depth_is_opaque_rather_than_a_fit(self):
+        """One point cannot determine a line, so do not pretend it does."""
+        from dustcompendium.postprocess import OPAQUE_LOG_TRANSMISSION
+
+        depths, attenuation = self.perfect()
+        within = (depths > 0) & (depths * 10.0 >= depths[depths > 0].max())
+        attenuation[np.flatnonzero(within)[:-1], 0, 0] = 0.0
+        coefficients, _ = fit_extrapolation(depths, attenuation)
+        assert coefficients[0, 0, 0] == OPAQUE_LOG_TRANSMISSION
+        assert coefficients[1, 0, 0] == 0.0
 
 
 @pytest.mark.hyperion

@@ -75,6 +75,13 @@ three times worse.
 
 **Affected: the `Ferrara1999_*` original-resolution tabulations.**
 
+### The spheroid scale radius axis, in the compendium tabulations
+
+The published `spheroidScaleRadial` values are rounded to two significant
+figures -- 0.0013 where the grid point is 0.00125893 -- so Galacticus
+interpolates on radii up to **3.3%** away from the ones the models were actually
+computed at. The re-run writes the axis at full precision.
+
 ## Latent, and not reaching published data
 
 These were found in the same code. The published grids happen to avoid all of
@@ -94,6 +101,30 @@ different grid, and each is now a regression test.
   `R = r_s`.
 - `spheroidCutOff` was parsed and never applied, so the Ferrara-matched models
   were not truncated at five effective radii as intended. See below.
+
+## Extrapolation beyond the tabulated optical depths
+
+Both the published tabulations and the re-run store two coefficients per
+wavelength, inclination and spheroid radius, giving the transmission beyond the
+largest tabulated depth as `exp(c0 + c1 ln tau)`. Galacticus uses them by
+default (`extrapolateOpticalDepth`) and does not test them for NaN.
+
+**The power-law form holds.** Measured on the Rv3.1 re-run, the fit residual
+against the Monte Carlo noise in the same range is 0.59 for the spheroid --
+below the noise -- and 1.40 for the disk. This was previously an assumption.
+
+**Where it cannot be fitted, the cell is opaque.** For a compact spheroid buried
+in disk dust, transmission underflows to zero before the largest tabulated
+depth: over the Rv3.1 re-run that is 27% of cells, entirely at spheroid radii
+below 0.04. Those are recorded with `c1 = 0` and `c0 = log(tiny)`, so the
+extrapolation evaluates to the smallest positive double rather than to NaN,
+which the consumer would propagate into attenuations.
+
+Fitting whatever points such a cell has left is not better, and was tried.
+Transmission falls with optical depth, so a cell which underflows at the top of
+the range has only its deep tail left -- 98% of them peak below 1e-30, the
+largest anywhere being 1e-8. The resulting fits had gradients from -2654 to
++1236, the positive ones extrapolating to infinite transmission.
 
 ## An open question
 

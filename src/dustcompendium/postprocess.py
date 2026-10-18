@@ -31,6 +31,7 @@ from ._hyperion import missing_hyperion
 
 __all__ = [
     "EXTRAPOLATION_DECADES",
+    "OPAQUE_LOG_TRANSMISSION",
     "InsufficientDepths",
     "attenuation_of",
     "collect",
@@ -41,6 +42,13 @@ __all__ = [
 #: How far below the largest optical depth the extrapolation is fitted over, as
 #: a factor. Ten is the top decade, as in the original.
 EXTRAPOLATION_DECADES = 10.0
+
+#: The constant term recorded for a cell which transmits nothing, so that
+#: ``exp(c0 + c1 ln tau)`` evaluates to the smallest positive double rather than
+#: to not-a-number. Galacticus extrapolates beyond the tabulated depths by
+#: default and does not test for NaN, so an unfittable cell has to be given a
+#: number which means "opaque" instead of none at all.
+OPAQUE_LOG_TRANSMISSION = float(np.log(np.finfo(float).tiny))
 
 
 class InsufficientDepths(ValueError):
@@ -186,6 +194,27 @@ def fit_extrapolation(
         coefficients[1, finite] = gradient
         modelled = intercept + np.outer(abscissa, gradient)
         residual[finite] = np.sqrt(np.mean((logarithms[:, finite] - modelled) ** 2, axis=0))
+
+    # A cell whose transmission has underflowed to zero anywhere in the fitting
+    # range is opaque, not merely unfittable, and the honest statement about it
+    # is that nothing escapes. Record that as a floor rather than as
+    # not-a-number: the consumer extrapolates beyond the table by default and
+    # does not test for NaN, so leaving these unset turns them into NaN
+    # attenuations downstream.
+    #
+    # Fitting whatever points such a cell has left is not the better answer, and
+    # was tried. Transmission falls with optical depth, so a cell which
+    # underflows at the top of the range has only the deep tail left -- measured
+    # over the Rv3.1 re-run, 98% of them peak below 1e-30 and the largest
+    # anywhere is 1e-8. Lines through numbers that small are noise: they came out
+    # with gradients from -2654 to +1236, the positive ones extrapolating to
+    # infinite transmission. There is nothing there to recover.
+    #
+    # The residual is left absent: there was no fit, so there is no residual, and
+    # that keeps these cells identifiable.
+    opaque = ~finite
+    coefficients[0, opaque] = OPAQUE_LOG_TRANSMISSION
+    coefficients[1, opaque] = 0.0
     return coefficients.reshape(2, *trailing), residual.reshape(trailing)
 
 
