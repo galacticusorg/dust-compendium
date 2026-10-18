@@ -75,6 +75,20 @@ three times worse.
 
 **Affected: the `Ferrara1999_*` original-resolution tabulations.**
 
+### Axis differences between the published tabulations and the re-run
+
+Two, neither of which affects usability -- Galacticus reads every axis from the
+file -- but worth knowing when comparing the two.
+
+The **optical depth axis** has sixty positive points in the re-run against
+fifty-nine published, so the tabulated depths do not coincide. The original
+script's count of sixty included the zero it appended afterwards; the
+configurations here read it as sixty positive points.
+
+The **inclination axis** has twenty-three points spaced uniformly in their
+cosine, against forty-six spaced uniformly in angle. That one is deliberate:
+measured on a disk, it interpolates as accurately for half the cost.
+
 ### The spheroid scale radius axis, in the compendium tabulations
 
 The published `spheroidScaleRadial` values are rounded to two significant

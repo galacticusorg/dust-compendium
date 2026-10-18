@@ -50,6 +50,13 @@ geometry:
         verticalStructure: sechSquared
         scaleRadial: 1.0
         scaleHeight: 0.137
+        # Sixty points plus a zero, where the published tabulation has
+        # fifty-nine plus a zero: the original's `count` of 60 included the zero
+        # it appended afterwards, which was read here as sixty positive points.
+        # The axes therefore do not coincide, which costs nothing -- Galacticus
+        # reads the axis from the file, and sixty points over six decades
+        # samples marginally better -- but it is not a byte-for-byte axis match.
+        # Left as it stands so that all five grain models share one axis.
         opticalDepth:
           minimum: 0.01
           maximum: 1.0e4
