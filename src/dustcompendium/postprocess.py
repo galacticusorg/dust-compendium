@@ -195,6 +195,23 @@ def fit_extrapolation(
         modelled = intercept + np.outer(abscissa, gradient)
         residual[finite] = np.sqrt(np.mean((logarithms[:, finite] - modelled) ** 2, axis=0))
 
+    # A fit may come out non-decreasing, which transmission cannot be: adding
+    # dust cannot let more light through. It happens on cells which are barely
+    # attenuated at all -- a spheroid tens of disk scale lengths across, where
+    # transmission sits at 0.999 and the gradient is pure noise -- and only
+    # matters because extrapolating a tiny positive slope far past the table
+    # eventually reports more light than the galaxy emitted. Hold such a cell
+    # flat at the transmission it had at the largest tabulated depth, which is
+    # what the data actually says and what the consumer does when extrapolation
+    # is switched off. Over the five re-run grain models this touches at most 87
+    # cells of 293,250; the published files have 58,383.
+    rising = finite & (coefficients[1] > 0.0)
+    if np.any(rising):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            boundary = np.log(selected.reshape(selected.shape[0], -1)[-1])
+        coefficients[0, rising] = boundary[rising]
+        coefficients[1, rising] = 0.0
+
     # A cell whose transmission has underflowed to zero anywhere in the fitting
     # range is opaque, not merely unfittable, and the honest statement about it
     # is that nothing escapes. Record that as a floor rather than as

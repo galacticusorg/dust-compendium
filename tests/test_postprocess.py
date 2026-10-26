@@ -104,6 +104,39 @@ class TestExtrapolation:
         with pytest.raises(ValueError, match="optical depths against an array"):
             fit_extrapolation(np.array([1.0, 10.0, 100.0]), np.ones((2, 1)))
 
+    def test_a_rising_fit_is_held_flat_instead(self):
+        """Transmission cannot rise with optical depth: more dust, less light.
+
+        It happens on cells which are barely attenuated at all, where the
+        gradient is noise, and matters only because extrapolating a small
+        positive slope far past the table eventually reports more light than the
+        galaxy emitted.
+        """
+        depths = np.hstack([0.0, np.logspace(-2.0, 3.0, 21)])
+        within = (depths > 0) & (depths * 10.0 >= depths[depths > 0].max())
+        attenuation = np.full((depths.size, 1, 2), 0.999)
+        attenuation[within, 0, 0] = np.linspace(0.9985, 0.9995, int(within.sum()))
+        attenuation[:, 0, 1] = np.exp(-0.5) * np.where(depths > 0, depths, 1.0) ** -0.8
+
+        coefficients, _ = fit_extrapolation(depths, attenuation)
+        assert coefficients[1, 0, 0] == 0.0
+        # Held at the transmission it had at the largest tabulated depth.
+        np.testing.assert_allclose(np.exp(coefficients[0, 0, 0]), attenuation[-1, 0, 0], rtol=1e-12)
+        # And a falling fit is left alone.
+        np.testing.assert_allclose(coefficients[1, 0, 1], -0.8, rtol=1.0e-9)
+
+    def test_the_extrapolation_never_creates_light(self):
+        """The property a published tabulation should be able to promise."""
+        depths, attenuation = self.perfect()
+        rng = np.random.default_rng(7)
+        attenuation = attenuation * (1.0 + 0.002 * rng.standard_normal(attenuation.shape))
+        attenuation[:, 0, 0] = 0.0
+        coefficients, _ = fit_extrapolation(depths, attenuation)
+        for depth in (1.0e4, 1.0e8, 1.0e12):
+            transmission = np.exp(coefficients[0] + coefficients[1] * np.log(depth))
+            assert np.isfinite(transmission).all()
+            assert transmission.max() <= 1.0
+
     def test_a_cell_which_transmits_nothing_is_recorded_as_opaque(self):
         """Not as not-a-number, which the consumer would propagate.
 

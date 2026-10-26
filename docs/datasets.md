@@ -134,6 +134,15 @@ below 0.04. Those are recorded with `c1 = 0` and `c0 = log(tiny)`, so the
 extrapolation evaluates to the smallest positive double rather than to NaN,
 which the consumer would propagate into attenuations.
 
+**A fit which rises is held flat.** Transmission cannot increase with optical
+depth, but a least-squares fit to a cell which is barely attenuated at all --
+a spheroid tens of disk scale lengths across, transmitting 0.999 -- can come out
+with a gradient that is positive noise, and extrapolating that far past the
+table eventually reports more light than the galaxy emitted. Such a cell is held
+at the transmission it had at the largest tabulated depth. Across the five
+re-run grain models this touches at most 87 cells of 293,250; the published
+files contain between 20,289 and 68,387.
+
 Fitting whatever points such a cell has left is not better, and was tried.
 Transmission falls with optical depth, so a cell which underflows at the top of
 the range has only its deep tail left -- 98% of them peak below 1e-30, the
